@@ -88,16 +88,27 @@ The app uses:
 The Electron app uses a secure OAuth flow with GitHub:
 
 1. User clicks "Sign in with GitHub" in the app
-2. The OAuth URL opens in the user's default browser
+2. The OAuth URL opens in the user's default browser with `source=electron` parameter
 3. User authenticates with GitHub in their browser
-4. After authentication, the browser redirects to `https://colabify.xyz/auth/callback`
-5. The web callback page redirects to the custom protocol `devpulse://auth/callback` with the auth tokens
+4. After authentication, the browser redirects to `https://colabify.xyz/auth/callback?source=electron&code=...`
+5. The web callback page detects the `source=electron` parameter, exchanges the code for tokens, and redirects to `devpulse://auth/callback#access_token=...`
 6. The Electron app receives the callback via deep linking and completes the authentication
 
 This flow ensures:
 - Users authenticate in their trusted browser (not an embedded webview)
 - Auth tokens are securely passed back to the app
 - The app remains sandboxed and secure
+
+### Important: Supabase Configuration
+
+You must add these redirect URLs to your Supabase project:
+
+1. Go to **Supabase Dashboard** → **Authentication** → **URL Configuration**
+2. Add to **Redirect URLs**:
+   - `https://colabify.xyz/auth/callback`
+   - `https://colabify.xyz/auth/callback?source=electron`
+
+Without these configured, the OAuth flow will fail.
 
 ### Deep Linking Setup
 

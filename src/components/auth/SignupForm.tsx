@@ -70,15 +70,16 @@ export function SignupForm() {
     // Check if running in Electron
     const isElectron = window.electronAPI?.isElectron
 
-    // For Electron, use custom protocol callback. For web, use the web URL
+    // Add query parameter to identify Electron flow
     const redirectUrl = isElectron
-      ? 'devpulse://auth/callback'
+      ? 'https://colabify.xyz/auth/callback?source=electron'
       : 'https://colabify.xyz/auth/callback'
 
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'github',
       options: {
         redirectTo: redirectUrl,
+        skipBrowserRedirect: isElectron, // Prevent automatic redirect in Electron
       },
     })
 
@@ -90,9 +91,10 @@ export function SignupForm() {
 
     // For Electron, open the OAuth URL in the default browser
     if (isElectron && data?.url && window.electronAPI) {
+      console.log('Opening OAuth URL in browser:', data.url)
       await window.electronAPI.openExternalUrl(data.url)
     }
-    // For web, the browser will handle the redirect automatically
+    // For web, the browser will handle the redirect automatically (skipBrowserRedirect is false)
   }
 
   return (
