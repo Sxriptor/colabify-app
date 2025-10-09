@@ -1,20 +1,81 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { useRouter } from 'next/navigation'
+
+declare global {
+  interface Window {
+    electronAPI?: {
+      openExternalUrl: (url: string) => Promise<{ success: boolean }>;
+      onAuthCallback: (callback: (url: string) => void) => void;
+      removeAuthCallback: () => void;
+      isElectron: boolean;
+    };
+  }
+}
 
 export function SignupForm() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const supabase = createClient()
+  const router = useRouter()
+
+  useEffect(() => {
+    // Set up auth callback listener for Electron
+    if (window.electronAPI?.isElectron) {
+      window.electronAPI.onAuthCallback(async (callbackUrl) => {
+        console.log('Auth callback received:', callbackUrl)
+
+        try {
+          // Parse the URL to extract the hash fragment
+          const url = new URL(callbackUrl)
+          const hashParams = new URLSearchParams(url.hash.substring(1))
+          const accessToken = hashParams.get('access_token')
+          const refreshToken = hashParams.get('refresh_token')
+
+          if (accessToken) {
+            // Set the session in Supabase
+            const { error } = await supabase.auth.setSession({
+              access_token: accessToken,
+              refresh_token: refreshToken || ''
+            })
+
+            if (error) {
+              console.error('Error setting session:', error)
+              setError(error.message)
+            } else {
+              // Redirect to dashboard
+              router.push('/dashboard')
+            }
+          }
+        } catch (err) {
+          console.error('Error processing auth callback:', err)
+          setError('Failed to process authentication')
+        } finally {
+          setLoading(false)
+        }
+      })
+
+      return () => {
+        window.electronAPI?.removeAuthCallback()
+      }
+    }
+  }, [supabase, router])
 
   const handleGitHubSignup = async () => {
     setLoading(true)
     setError(null)
 
-    const redirectUrl = `${window.location.origin}/auth/callback`
+    // Check if running in Electron
+    const isElectron = window.electronAPI?.isElectron
 
-    const { error } = await supabase.auth.signInWithOAuth({
+    // For Electron, use custom protocol callback. For web, use the web URL
+    const redirectUrl = isElectron
+      ? 'devpulse://auth/callback'
+      : 'https://colabify.xyz/auth/callback'
+
+    const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'github',
       options: {
         redirectTo: redirectUrl,
@@ -24,7 +85,14 @@ export function SignupForm() {
     if (error) {
       setError(error.message)
       setLoading(false)
+      return
     }
+
+    // For Electron, open the OAuth URL in the default browser
+    if (isElectron && data?.url && window.electronAPI) {
+      await window.electronAPI.openExternalUrl(data.url)
+    }
+    // For web, the browser will handle the redirect automatically
   }
 
   return (
@@ -39,7 +107,7 @@ export function SignupForm() {
         <p className="text-sm text-gray-600">
           Create your DevPulse account using GitHub to get started with clean repository notifications and project management.
         </p>
-        
+
         <button
           type="button"
           onClick={handleGitHubSignup}

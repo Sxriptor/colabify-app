@@ -1,6 +1,12 @@
 {
   "appId": "com.devpulse.app",
   "productName": "DevPulse",
+  "protocols": [
+    {
+      "name": "DevPulse",
+      "schemes": ["devpulse"]
+    }
+  ],
   "directories": {
     "output": "dist",
     "buildResources": "build"

@@ -77,9 +77,37 @@ The app uses:
 
 - Native desktop notifications
 - Cross-platform support (Mac, Windows, Linux)
+- Browser-based OAuth authentication flow
+- Deep linking for OAuth callbacks
 - Offline support
 - Native window controls
 - Auto-updater ready (configure in electron-builder.json)
+
+## Authentication Flow
+
+The Electron app uses a secure OAuth flow with GitHub:
+
+1. User clicks "Sign in with GitHub" in the app
+2. The OAuth URL opens in the user's default browser
+3. User authenticates with GitHub in their browser
+4. After authentication, the browser redirects to `https://colabify.xyz/auth/callback`
+5. The web callback page redirects to the custom protocol `devpulse://auth/callback` with the auth tokens
+6. The Electron app receives the callback via deep linking and completes the authentication
+
+This flow ensures:
+- Users authenticate in their trusted browser (not an embedded webview)
+- Auth tokens are securely passed back to the app
+- The app remains sandboxed and secure
+
+### Deep Linking Setup
+
+The app registers the `devpulse://` protocol on all platforms:
+
+- **macOS**: Registered via `electron-builder.json` protocols configuration
+- **Windows**: Registered via NSIS installer
+- **Linux**: Registered via `.desktop` file
+
+In development mode, the protocol is registered when the app starts.
 
 ## Notes
 
@@ -87,6 +115,7 @@ The app uses:
 - Service workers are disabled in the Electron version - native notifications are used instead
 - Images are unoptimized for Electron compatibility
 - The app requires network connectivity for Supabase authentication and data
+- OAuth redirects through `colabify.xyz` to enable the deep link callback
 
 ## Troubleshooting
 

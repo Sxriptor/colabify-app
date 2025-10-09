@@ -5,24 +5,23 @@ import { NextRequest, NextResponse } from 'next/server'
 export async function GET(request: NextRequest) {
   console.log('🚀 AUTH CALLBACK HIT! 🚀')
   console.log('Request URL:', request.url)
-  console.log('Request headers:', Object.fromEntries(request.headers.entries()))
-  console.log('Environment variables:')
-  console.log('- NEXT_PUBLIC_SITE_URL:', process.env.NEXT_PUBLIC_SITE_URL)
-  console.log('- NEXTAUTH_URL:', process.env.NEXTAUTH_URL)
-  console.log('- NODE_ENV:', process.env.NODE_ENV)
-  
-  const { searchParams, origin } = new URL(request.url)
+
+  const { searchParams, origin, hash } = new URL(request.url)
   const code = searchParams.get('code')
   const next = searchParams.get('next') ?? '/dashboard'
 
-  console.log('Auth callback params:', { code: !!code, next, origin })
+  // Check for access_token in hash (implicit flow - used for Electron)
+  // This will be in the URL fragment, which we need to handle client-side for Electron
+  const requestUrl = new URL(request.url)
+
+  console.log('Auth callback params:', { code: !!code, next, origin, hash })
 
   if (code) {
     const supabase = await createClient()
-    
+
     // Exchange the code for a session
     const { data: authData, error: authError } = await supabase.auth.exchangeCodeForSession(code)
-    
+
     if (authError) {
       console.error('Auth error:', authError)
       return NextResponse.redirect(`${origin}/auth/auth-code-error`)

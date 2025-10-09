@@ -7,6 +7,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
   showNotification: (data) => ipcRenderer.invoke('show-notification', data),
   requestNotificationPermission: () => ipcRenderer.invoke('request-notification-permission'),
 
+  // OAuth / Browser API
+  openExternalUrl: (url) => ipcRenderer.invoke('open-external-url', url),
+  onAuthCallback: (callback) => {
+    ipcRenderer.on('auth-callback', (event, url) => callback(url));
+  },
+  removeAuthCallback: () => {
+    ipcRenderer.removeAllListeners('auth-callback');
+  },
+
   // Platform information
   platform: process.platform,
   isElectron: true,
