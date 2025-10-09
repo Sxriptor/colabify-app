@@ -2,6 +2,18 @@
 
 // Push notification utilities for DevPulse
 
+// Type declaration for Electron API
+declare global {
+  interface Window {
+    electronAPI?: {
+      showNotification: (data: { title: string; body: string; icon?: string }) => Promise<{ success: boolean }>;
+      requestNotificationPermission: () => Promise<'granted' | 'denied'>;
+      platform: string;
+      isElectron: boolean;
+    };
+  }
+}
+
 export interface NotificationPayload {
   title: string
   body: string
@@ -29,8 +41,19 @@ export class PushNotificationManager {
     return PushNotificationManager.instance
   }
 
+  // Check if running in Electron
+  private isElectron(): boolean {
+    return typeof window !== 'undefined' && window.electronAPI?.isElectron === true
+  }
+
   // Check if push notifications are supported
   isSupported(): boolean {
+    // In Electron, we always support notifications
+    if (this.isElectron()) {
+      return true
+    }
+
+    // For web, check for service worker support
     return (
       'serviceWorker' in navigator &&
       'PushManager' in window &&
@@ -40,6 +63,10 @@ export class PushNotificationManager {
 
   // Get current permission status
   getPermissionStatus(): NotificationPermission {
+    if (this.isElectron()) {
+      // Electron notifications are always granted
+      return 'granted'
+    }
     return Notification.permission
   }
 
@@ -49,12 +76,24 @@ export class PushNotificationManager {
       throw new Error('Push notifications are not supported')
     }
 
+    // In Electron, use the electronAPI
+    if (this.isElectron() && window.electronAPI) {
+      const permission = await window.electronAPI.requestNotificationPermission()
+      return permission
+    }
+
+    // In web, use the Notification API
     const permission = await Notification.requestPermission()
     return permission
   }
 
   // Register service worker
   async registerServiceWorker(): Promise<ServiceWorkerRegistration> {
+    // Skip service worker registration in Electron
+    if (this.isElectron()) {
+      throw new Error('Service workers are not used in Electron')
+    }
+
     if (!this.isSupported()) {
       throw new Error('Service workers are not supported')
     }
@@ -73,7 +112,12 @@ export class PushNotificationManager {
   }
 
   // Subscribe to push notifications
-  async subscribe(): Promise<PushSubscription> {
+  async subscribe(): Promise<PushSubscription | null> {
+    // Electron doesn't use push subscriptions
+    if (this.isElectron()) {
+      return null
+    }
+
     if (!this.registration) {
       await this.registerServiceWorker()
     }
@@ -86,7 +130,7 @@ export class PushNotificationManager {
       // You'll need to generate VAPID keys for production
       // For now, we'll use a placeholder
       const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || 'placeholder-key'
-      
+
       this.subscription = await this.registration.pushManager.subscribe({
         userVisibleOnly: true,
         applicationServerKey: this.urlBase64ToUint8Array(vapidPublicKey)
@@ -102,6 +146,11 @@ export class PushNotificationManager {
 
   // Get existing subscription
   async getSubscription(): Promise<PushSubscription | null> {
+    // Electron doesn't use push subscriptions
+    if (this.isElectron()) {
+      return null
+    }
+
     if (!this.registration) {
       await this.registerServiceWorker()
     }
@@ -116,19 +165,29 @@ export class PushNotificationManager {
 
   // Unsubscribe from push notifications
   async unsubscribe(): Promise<boolean> {
+    // In Electron, there's nothing to unsubscribe from
+    if (this.isElectron()) {
+      return true
+    }
+
     const subscription = await this.getSubscription()
-    
+
     if (subscription) {
       const result = await subscription.unsubscribe()
       this.subscription = null
       return result
     }
-    
+
     return false
   }
 
   // Send subscription to server
-  async sendSubscriptionToServer(subscription: PushSubscription): Promise<void> {
+  async sendSubscriptionToServer(subscription: PushSubscription | null): Promise<void> {
+    // Skip for Electron
+    if (this.isElectron() || !subscription) {
+      return
+    }
+
     try {
       const response = await fetch('/api/notifications/subscribe', {
         method: 'POST',
@@ -155,6 +214,17 @@ export class PushNotificationManager {
       throw new Error('Notification permission not granted')
     }
 
+    // Use Electron's native notifications
+    if (this.isElectron() && window.electronAPI) {
+      await window.electronAPI.showNotification({
+        title: payload.title,
+        body: payload.body,
+        icon: payload.icon
+      })
+      return
+    }
+
+    // Use web notifications
     const options: NotificationOptions = {
       body: payload.body,
       icon: payload.icon || '/icons/icon-192x192.svg',
@@ -177,12 +247,18 @@ export class PushNotificationManager {
         return false
       }
 
-      // Register service worker
+      // In Electron, notifications are always available
+      if (this.isElectron()) {
+        console.log('Electron notifications initialized')
+        return true
+      }
+
+      // Register service worker (web only)
       await this.registerServiceWorker()
 
       // Check permission
       let permission = this.getPermissionStatus()
-      
+
       if (permission === 'default') {
         permission = await this.requestPermission()
       }
@@ -194,7 +270,7 @@ export class PushNotificationManager {
 
       // Get or create subscription
       let subscription = await this.getSubscription()
-      
+
       if (!subscription) {
         subscription = await this.subscribe()
       }
