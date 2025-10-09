@@ -45,6 +45,34 @@ function createWindow() {
     mainWindow.show();
   });
 
+  // Prevent navigation to external URLs (for OAuth flow)
+  mainWindow.webContents.on('will-navigate', (event, navigationUrl) => {
+    const parsedUrl = new URL(navigationUrl);
+    const currentUrl = new URL(mainWindow.webContents.getURL());
+
+    // Allow navigation within the app
+    if (isDev) {
+      // In dev, only allow localhost:3000
+      if (parsedUrl.origin !== 'http://localhost:3000') {
+        event.preventDefault();
+        console.log('Blocked navigation to:', navigationUrl);
+      }
+    } else {
+      // In production, only allow file:// protocol
+      if (parsedUrl.protocol !== 'file:') {
+        event.preventDefault();
+        console.log('Blocked navigation to:', navigationUrl);
+      }
+    }
+  });
+
+  // Prevent new windows from opening (this catches OAuth popups)
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    // Block all new windows - OAuth should open in external browser via our IPC handler
+    console.log('Blocked window.open to:', url);
+    return { action: 'deny' };
+  });
+
   // Open DevTools in development
   if (isDev) {
     mainWindow.webContents.openDevTools();
