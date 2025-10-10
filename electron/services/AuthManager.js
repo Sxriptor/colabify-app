@@ -1,0 +1,342 @@
+const { shell } = require('electron');
+const http = require('http');
+const { URL } = require('url');
+const keytar = require('keytar');
+
+class AuthManager {
+  constructor() {
+    this.callbackServer = null;
+    this.authPromise = null;
+    this.serviceName = 'DevPulse';
+    this.accountName = 'auth-token';
+  }
+
+  /**
+   * Find an open port in the given range
+   */
+  async findOpenPort(startPort = 8080, endPort = 8090) {
+    for (let port = startPort; port <= endPort; port++) {
+      if (await this.isPortOpen(port)) {
+        return port;
+      }
+    }
+    throw new Error(`No open ports found between ${startPort} and ${endPort}`);
+  }
+
+  /**
+   * Check if a port is available
+   */
+  isPortOpen(port) {
+    return new Promise((resolve) => {
+      const server = http.createServer();
+      server.listen(port, () => {
+        server.close(() => resolve(true));
+      });
+      server.on('error', () => resolve(false));
+    });
+  }
+
+  /**
+   * Start the local callback server
+   */
+  async startCallbackServer(port) {
+    return new Promise((resolve, reject) => {
+      this.callbackServer = http.createServer((req, res) => {
+        const url = new URL(req.url, `http://localhost:${port}`);
+        
+        console.log('🔗 Callback received:', url.pathname, url.search);
+
+        if (url.pathname === '/callback') {
+          const token = url.searchParams.get('token');
+          const expiresAt = url.searchParams.get('expires_at');
+          const subscriptionStatus = url.searchParams.get('subscription_status');
+          const error = url.searchParams.get('error');
+
+          // Send response to browser
+          res.writeHead(200, { 'Content-Type': 'text/html' });
+          
+          if (error) {
+            res.end(`
+              <html>
+                <head><title>Authentication Error</title></head>
+                <body style="font-family: system-ui; text-align: center; padding: 50px;">
+                  <h2>Authentication Error</h2>
+                  <p>Error: ${error}</p>
+                  <p>You can close this window and try again.</p>
+                </body>
+              </html>
+            `);
+            this.authPromise?.reject(new Error(error));
+          } else if (token) {
+            res.end(`
+              <html>
+                <head><title>Authentication Successful</title></head>
+                <body style="font-family: system-ui; text-align: center; padding: 50px;">
+                  <h2>✅ Authentication Successful!</h2>
+                  <p>You can now close this window and return to DevPulse.</p>
+                  <script>
+                    setTimeout(() => window.close(), 2000);
+                  </script>
+                </body>
+              </html>
+            `);
+            
+            // Process the successful authentication
+            this.processAuthCallback(token, expiresAt, subscriptionStatus);
+          } else {
+            res.end(`
+              <html>
+                <head><title>Authentication Error</title></head>
+                <body style="font-family: system-ui; text-align: center; padding: 50px;">
+                  <h2>Authentication Error</h2>
+                  <p>No authentication token received.</p>
+                  <p>You can close this window and try again.</p>
+                </body>
+              </html>
+            `);
+            this.authPromise?.reject(new Error('No token received'));
+          }
+
+          // Close server after handling callback
+          setTimeout(() => {
+            this.callbackServer?.close();
+            this.callbackServer = null;
+          }, 1000);
+        } else {
+          res.writeHead(404);
+          res.end('Not found');
+        }
+      });
+
+      this.callbackServer.listen(port, (err) => {
+        if (err) {
+          reject(err);
+        } else {
+          console.log(`🚀 Callback server listening on port ${port}`);
+          resolve(port);
+        }
+      });
+    });
+  }
+
+  /**
+   * Process the authentication callback
+   */
+  async processAuthCallback(token, expiresAt, subscriptionStatus) {
+    try {
+      console.log('🔄 Processing auth callback...');
+      
+      // Store token securely
+      await this.storeToken(token, expiresAt);
+      
+      // Get user info from the token
+      const userInfo = await this.getUserInfo(token);
+      
+      console.log('✅ Authentication successful for:', userInfo.email);
+      
+      // Resolve the auth promise
+      this.authPromise?.resolve({
+        user: userInfo,
+        token,
+        expiresAt,
+        subscriptionStatus
+      });
+      
+    } catch (error) {
+      console.error('❌ Error processing auth callback:', error);
+      this.authPromise?.reject(error);
+    }
+  }
+
+  /**
+   * Get user information from token
+   */
+  async getUserInfo(token) {
+    try {
+      // Always use production URL for consistency
+      const response = await fetch('https://colabify.xyz/api/auth/user', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to get user info: ${response.status}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('Error getting user info:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Store token securely using keytar
+   */
+  async storeToken(token, expiresAt) {
+    try {
+      const authData = {
+        token,
+        expiresAt: expiresAt || (Date.now() + 24 * 60 * 60 * 1000), // Default 24h
+        storedAt: Date.now()
+      };
+      
+      await keytar.setPassword(this.serviceName, this.accountName, JSON.stringify(authData));
+      console.log('🔐 Token stored securely');
+    } catch (error) {
+      console.error('Error storing token:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Retrieve stored token
+   */
+  async getStoredToken() {
+    try {
+      const stored = await keytar.getPassword(this.serviceName, this.accountName);
+      if (!stored) return null;
+
+      const authData = JSON.parse(stored);
+      
+      // Check if token is expired
+      if (authData.expiresAt && Date.now() > authData.expiresAt) {
+        console.log('🕐 Stored token expired, removing...');
+        await this.clearStoredToken();
+        return null;
+      }
+
+      return authData;
+    } catch (error) {
+      console.error('Error retrieving stored token:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Clear stored token
+   */
+  async clearStoredToken() {
+    try {
+      await keytar.deletePassword(this.serviceName, this.accountName);
+      console.log('🗑️ Token cleared from secure storage');
+    } catch (error) {
+      console.error('Error clearing token:', error);
+    }
+  }
+
+  /**
+   * Begin external sign-in process
+   */
+  async beginExternalSignIn() {
+    try {
+      console.log('🚀 Starting external sign-in process...');
+
+      // Find an open port for callback
+      const port = await this.findOpenPort(8080, 8090);
+      
+      // Start callback server
+      await this.startCallbackServer(port);
+      
+      // Build redirect URI
+      const redirectUri = `http://localhost:${port}/callback`;
+      
+      // Build auth URL - using your account management system
+      const authUrl = `https://colabify.xyz/login?source=ide&redirect_uri=${encodeURIComponent(redirectUri)}`;
+      
+      console.log('🌐 Opening auth URL:', authUrl);
+      
+      // Open external browser
+      await shell.openExternal(authUrl);
+      
+      // Return promise that resolves when auth completes
+      return new Promise((resolve, reject) => {
+        this.authPromise = { resolve, reject };
+        
+        // Set timeout for auth process
+        setTimeout(() => {
+          if (this.authPromise) {
+            this.authPromise.reject(new Error('Authentication timeout'));
+            this.authPromise = null;
+          }
+          if (this.callbackServer) {
+            this.callbackServer.close();
+            this.callbackServer = null;
+          }
+        }, 5 * 60 * 1000); // 5 minute timeout
+      });
+      
+    } catch (error) {
+      console.error('❌ Error starting external sign-in:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Check if user is currently authenticated
+   */
+  async isAuthenticated() {
+    const stored = await this.getStoredToken();
+    return !!stored;
+  }
+
+  /**
+   * Get current user info
+   */
+  async getCurrentUser() {
+    const stored = await this.getStoredToken();
+    if (!stored) return null;
+
+    try {
+      return await this.getUserInfo(stored.token);
+    } catch (error) {
+      console.error('Error getting current user:', error);
+      // If we can't get user info, token might be invalid
+      await this.clearStoredToken();
+      return null;
+    }
+  }
+
+  /**
+   * Sign out user
+   */
+  async signOut() {
+    await this.clearStoredToken();
+    console.log('👋 User signed out');
+  }
+
+  /**
+   * Make authenticated API call
+   */
+  async makeAuthenticatedRequest(endpoint, options = {}) {
+    const stored = await this.getStoredToken();
+    if (!stored) {
+      throw new Error('Not authenticated');
+    }
+
+    const response = await fetch(`https://colabify.xyz/api${endpoint}`, {
+      ...options,
+      headers: {
+        'Authorization': `Bearer ${stored.token}`,
+        'Content-Type': 'application/json',
+        ...options.headers
+      }
+    });
+
+    if (response.status === 401) {
+      // Token might be invalid, clear it
+      await this.clearStoredToken();
+      throw new Error('Authentication expired');
+    }
+
+    if (!response.ok) {
+      throw new Error(`API call failed: ${response.status}`);
+    }
+
+    return response.json();
+  }
+}
+
+module.exports = AuthManager;

@@ -7,15 +7,19 @@ import { useRouter, useSearchParams } from 'next/navigation'
 declare global {
   interface Window {
     electronAPI?: {
+      showNotification: (data: { title: string; body: string; icon?: string }) => Promise<{ success: boolean }>;
+      requestNotificationPermission: () => Promise<"granted" | "denied">;
       openExternalUrl: (url: string) => Promise<{ success: boolean }>;
-      onAuthCallback: (callback: (url: string) => void) => void;
-      removeAuthCallback: () => void;
-      login: () => Promise<{ success: boolean }>;
+      startSignIn: () => Promise<{ success: boolean; user?: any; error?: string }>;
       logout: () => Promise<{ success: boolean }>;
       getUser: () => Promise<any>;
-      onAuthSuccess: (callback: (data: any) => void) => void;
+      isAuthenticated: () => Promise<boolean>;
+      onAuthSuccess: (callback: (data: { user: any; subscriptionStatus?: string }) => void) => void;
       onAuthError: (callback: (error: string) => void) => void;
+      onAuthSignedOut: (callback: () => void) => void;
+      removeAuthListeners: () => void;
       apiCall: (endpoint: string, options?: any) => Promise<any>;
+      platform: string;
       isElectron: boolean;
     };
   }
@@ -35,21 +39,27 @@ export function LoginForm() {
     // Set up auth event listeners for Electron
     if (window.electronAPI?.isElectron) {
       window.electronAPI.onAuthSuccess((data) => {
-        console.log('Auth success received:', data)
+        console.log('✅ Auth success received:', data)
         setLoading(false)
+        setError(null)
         // Redirect to dashboard
         router.push('/dashboard')
       })
 
       window.electronAPI.onAuthError((error) => {
-        console.error('Auth error received:', error)
+        console.error('❌ Auth error received:', error)
         setError(error)
         setLoading(false)
       })
+
+      // Cleanup listeners on unmount
+      return () => {
+        window.electronAPI?.removeAuthListeners()
+      }
     }
   }, [router])
 
-  const handleGitHubLogin = async () => {
+  const handleSignIn = async () => {
     setLoading(true)
     setError(null)
 
@@ -62,20 +72,25 @@ export function LoginForm() {
     console.log('Has Electron API:', !!window.electronAPI)
 
     if (isActuallyElectron && window.electronAPI) {
-      // Use the Electron auth flow - we're in the actual Electron app
+      // Use the Electron external browser auth flow
       try {
-        console.log('🔄 Using Electron auth flow - calling window.electronAPI.login()')
-        const result = await window.electronAPI.login()
-        console.log('✅ Electron login result:', result)
+        console.log('🔄 Starting Electron external browser auth...')
+        const result = await window.electronAPI.startSignIn()
+        console.log('🚀 Sign-in initiated:', result)
+        
+        if (!result.success) {
+          setError(result.error || 'Failed to start sign-in process')
+          setLoading(false)
+        }
         // Loading state will be handled by auth success/error callbacks
       } catch (error) {
-        console.error('❌ Electron login error:', error)
-        setError('Failed to initiate login')
+        console.error('❌ Electron sign-in error:', error)
+        setError('Failed to initiate sign-in')
         setLoading(false)
       }
     } else {
-      // Web flow - always use production URL for consistency
-      console.log('Using web auth flow')
+      // Web flow - use Supabase OAuth
+      console.log('🌐 Using web auth flow')
 
       // Always use production URL to avoid localhost/production conflicts
       const redirectUrl = isElectronPlatform
@@ -113,23 +128,26 @@ export function LoginForm() {
 
       <div className="text-center space-y-4">
         <p className="text-sm text-gray-600">
-          Sign in to Colabify using your GitHub account to get started with clean repository notifications.
+          Sign in to DevPulse to get started with clean repository notifications.
         </p>
 
         <button
           type="button"
-          onClick={handleGitHubLogin}
+          onClick={handleSignIn}
           disabled={loading}
           className="group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-gray-900 hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
             <path fillRule="evenodd" d="M10 0C4.477 0 0 4.484 0 10.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0110 4.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.203 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.942.359.31.678.921.678 1.856 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0020 10.017C20 4.484 15.522 0 10 0z" clipRule="evenodd" />
           </svg>
-          {loading ? 'Connecting to GitHub...' : 'Continue with GitHub'}
+          {loading ? 'Opening browser...' : 'Sign in with GitHub'}
         </button>
 
         <p className="text-xs text-gray-500">
-          We use GitHub OAuth to authenticate users and access repository information for notifications.
+          {window.electronAPI?.isElectron 
+            ? 'This will open your browser to complete the sign-in process.'
+            : 'We use GitHub OAuth to authenticate users and access repository information for notifications.'
+          }
         </p>
       </div>
     </div>

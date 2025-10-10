@@ -17,9 +17,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
 
   // Auth functions
-  login: () => ipcRenderer.invoke('auth:login'),
+  startSignIn: () => ipcRenderer.invoke('auth:start-sign-in'),
   logout: () => ipcRenderer.invoke('auth:logout'),
-  getUser: () => ipcRenderer.invoke('auth:getUser'),
+  getUser: () => ipcRenderer.invoke('auth:get-user'),
+  isAuthenticated: () => ipcRenderer.invoke('auth:is-authenticated'),
 
   // Auth event listeners
   onAuthSuccess: (callback) => {
@@ -28,18 +29,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onAuthError: (callback) => {
     ipcRenderer.on('auth-error', (event, error) => callback(error));
   },
+  onAuthSignedOut: (callback) => {
+    ipcRenderer.on('auth-signed-out', () => callback());
+  },
 
   // API calls with stored token
   apiCall: (endpoint, options) => ipcRenderer.invoke('api:call', endpoint, options),
 
-  // Test functions
-  testProtocol: () => ipcRenderer.invoke('test:protocol'),
-  
-  // Manual protocol test
-  testManualProtocol: () => {
-    const testUrl = 'colabify://test/callback?token=test123';
-    console.log('🧪 Testing manual protocol redirect to:', testUrl);
-    window.location.href = testUrl;
+  // Remove auth event listeners
+  removeAuthListeners: () => {
+    ipcRenderer.removeAllListeners('auth-success');
+    ipcRenderer.removeAllListeners('auth-error');
+    ipcRenderer.removeAllListeners('auth-signed-out');
   },
 
   // Platform information
