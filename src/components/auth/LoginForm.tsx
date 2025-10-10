@@ -4,30 +4,12 @@ import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter, useSearchParams } from 'next/navigation'
 
-declare global {
-  interface Window {
-    electronAPI?: {
-      showNotification: (data: { title: string; body: string; icon?: string }) => Promise<{ success: boolean }>;
-      requestNotificationPermission: () => Promise<"granted" | "denied">;
-      openExternalUrl: (url: string) => Promise<{ success: boolean }>;
-      startSignIn: () => Promise<{ success: boolean; user?: any; error?: string }>;
-      logout: () => Promise<{ success: boolean }>;
-      getUser: () => Promise<any>;
-      isAuthenticated: () => Promise<boolean>;
-      onAuthSuccess: (callback: (data: { user: any; subscriptionStatus?: string }) => void) => void;
-      onAuthError: (callback: (error: string) => void) => void;
-      onAuthSignedOut: (callback: () => void) => void;
-      removeAuthListeners: () => void;
-      apiCall: (endpoint: string, options?: any) => Promise<any>;
-      platform: string;
-      isElectron: boolean;
-    };
-  }
-}
+// Extend the existing Window interface from notifications.ts
 
 export function LoginForm() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [isClient, setIsClient] = useState(false)
   const supabase = createClient()
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -36,9 +18,12 @@ export function LoginForm() {
   const isElectronPlatform = searchParams.get('platform') === 'electron'
 
   useEffect(() => {
+    // Set client-side flag to prevent hydration mismatch
+    setIsClient(true)
+
     // Set up auth event listeners for Electron
-    if (window.electronAPI?.isElectron) {
-      window.electronAPI.onAuthSuccess((data) => {
+    if (typeof window !== 'undefined' && window.electronAPI?.isElectron) {
+      window.electronAPI.onAuthSuccess((data: any) => {
         console.log('✅ Auth success received:', data)
         setLoading(false)
         setError(null)
@@ -46,7 +31,7 @@ export function LoginForm() {
         router.push('/dashboard')
       })
 
-      window.electronAPI.onAuthError((error) => {
+      window.electronAPI.onAuthError((error: any) => {
         console.error('❌ Auth error received:', error)
         setError(error)
         setLoading(false)
@@ -54,7 +39,9 @@ export function LoginForm() {
 
       // Cleanup listeners on unmount
       return () => {
-        window.electronAPI?.removeAuthListeners()
+        if (typeof window !== 'undefined' && window.electronAPI?.removeAuthListeners) {
+          window.electronAPI.removeAuthListeners()
+        }
       }
     }
   }, [router])
@@ -64,14 +51,14 @@ export function LoginForm() {
     setError(null)
 
     // Check if we're actually in Electron environment
-    const isActuallyElectron = window.electronAPI?.isElectron === true
+    const isActuallyElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron === true
 
     console.log('🔍 Auth Debug Info:')
     console.log('Is Actually Electron:', isActuallyElectron)
     console.log('Is Electron Platform Param:', isElectronPlatform)
-    console.log('Has Electron API:', !!window.electronAPI)
+    console.log('Has Electron API:', typeof window !== 'undefined' && !!window.electronAPI)
 
-    if (isActuallyElectron && window.electronAPI) {
+    if (isActuallyElectron && window.electronAPI && window.electronAPI.startSignIn) {
       // Use the Electron external browser auth flow
       try {
         console.log('🔄 Starting Electron external browser auth...')
@@ -144,7 +131,7 @@ export function LoginForm() {
         </button>
 
         <p className="text-xs text-gray-500">
-          {window.electronAPI?.isElectron 
+          {isClient && window.electronAPI?.isElectron 
             ? 'This will open your browser to complete the sign-in process.'
             : 'We use GitHub OAuth to authenticate users and access repository information for notifications.'
           }
