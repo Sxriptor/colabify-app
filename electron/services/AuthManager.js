@@ -125,22 +125,30 @@ class AuthManager {
   async processAuthCallback(token, expiresAt, subscriptionStatus) {
     try {
       console.log('🔄 Processing auth callback...');
+      console.log('📥 Token received (first 50 chars):', token.substring(0, 50) + '...');
       
       // Store token securely
+      console.log('💾 Storing token in keytar...');
       await this.storeToken(token, expiresAt);
+      console.log('✅ Token stored successfully');
       
       // Get user info from the token
+      console.log('👤 Fetching user info from API...');
       const userInfo = await this.getUserInfo(token);
+      console.log('✅ User info received:', userInfo.email);
+      console.log('📦 Full user info:', JSON.stringify(userInfo, null, 2));
       
       console.log('✅ Authentication successful for:', userInfo.email);
       
       // Resolve the auth promise
+      console.log('🎯 Resolving auth promise...');
       this.authPromise?.resolve({
         user: userInfo,
         token,
         expiresAt,
         subscriptionStatus
       });
+      console.log('✅ Auth promise resolved');
       
     } catch (error) {
       console.error('❌ Error processing auth callback:', error);
@@ -165,7 +173,9 @@ class AuthManager {
         throw new Error(`Failed to get user info: ${response.status}`);
       }
 
-      return await response.json();
+      const data = await response.json();
+      // The API returns { user: profile }, so unwrap it
+      return data.user || data;
     } catch (error) {
       console.error('Error getting user info:', error);
       throw error;

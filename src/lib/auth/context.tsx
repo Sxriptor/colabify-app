@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, useContext, useEffect, useState } from 'react'
+import { createContext, useContext, useEffect, useState, useCallback } from 'react'
 import { User } from '@supabase/supabase-js'
 import { createClient } from '../supabase/client'
 
@@ -29,9 +29,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [customUser, setCustomUser] = useState<CustomUser | null>(null)
   const [loading, setLoading] = useState(true)
+  const [isElectron, setIsElectron] = useState(false)
   const supabase = createClient()
 
-  const ensureCustomUserExists = async (authUser: User) => {
+  // Check if we're in Electron on mount
+  useEffect(() => {
+    setIsElectron(typeof window !== 'undefined' && (window as any).electronAPI?.isElectron === true)
+  }, [])
+
+  const ensureCustomUserExists = useCallback(async (authUser: User) => {
     try {
       console.log('🔧 TEMP: Skipping database lookup, using fallback user')
       
@@ -56,25 +62,72 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.error('💥 Error in ensureCustomUserExists:', error)
       throw error
     }
-  }
+  }, [])
 
+  // Convert Electron user to Supabase User format
+  const convertElectronUserToSupabaseUser = useCallback((electronUser: any): User => {
+    return {
+      id: electronUser.id,
+      email: electronUser.email,
+      aud: 'authenticated',
+      role: 'authenticated',
+      user_metadata: {
+        full_name: electronUser.name,
+        name: electronUser.name,
+        avatar_url: electronUser.avatar_url,
+        provider_id: electronUser.github_id?.toString(),
+        user_name: electronUser.github_username,
+        preferred_username: electronUser.github_username,
+      },
+      app_metadata: {
+        provider: 'github',
+        providers: ['github'],
+      },
+      created_at: electronUser.created_at || new Date().toISOString(),
+    } as User
+  }, [])
+
+  // Get initial session
   useEffect(() => {
-    // Get initial session
     const getInitialSession = async () => {
       try {
         console.log('🔄 Getting initial session...')
-        const { data: { session } } = await supabase.auth.getSession()
-        const authUser = session?.user ?? null
-        console.log('📧 Initial session user:', authUser?.email)
-        setUser(authUser)
         
-        if (authUser) {
-          console.log('👤 Auth user found, ensuring custom user exists...')
-          await ensureCustomUserExists(authUser)
-          console.log('✅ Custom user setup complete')
+        if (isElectron) {
+          // For Electron, use the Electron API to check auth
+          console.log('🖥️ Electron detected, checking auth via Electron API...')
+          const electronAPI = (window as any).electronAPI
+          const isAuthenticated = await electronAPI.isAuthenticated()
+          
+          if (isAuthenticated) {
+            const electronUser = await electronAPI.getUser()
+            console.log('👤 Electron user:', electronUser)
+            
+            if (electronUser) {
+              const supabaseUser = convertElectronUserToSupabaseUser(electronUser)
+              setUser(supabaseUser)
+              await ensureCustomUserExists(supabaseUser)
+            }
+          } else {
+            console.log('❌ Not authenticated in Electron')
+            setUser(null)
+            setCustomUser(null)
+          }
         } else {
-          console.log('❌ No auth user found')
-          setCustomUser(null)
+          // For web, use Supabase
+          const { data: { session } } = await supabase.auth.getSession()
+          const authUser = session?.user ?? null
+          console.log('📧 Initial session user:', authUser?.email)
+          setUser(authUser)
+          
+          if (authUser) {
+            console.log('👤 Auth user found, ensuring custom user exists...')
+            await ensureCustomUserExists(authUser)
+            console.log('✅ Custom user setup complete')
+          } else {
+            console.log('❌ No auth user found')
+            setCustomUser(null)
+          }
         }
         
         console.log('🏁 Setting loading to false from initial session')
@@ -86,38 +139,88 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     getInitialSession()
+  }, [isElectron, supabase.auth, ensureCustomUserExists, convertElectronUserToSupabaseUser])
 
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        try {
-          console.log('🔄 Auth state change:', event, session?.user?.email)
-          const authUser = session?.user ?? null
-          setUser(authUser)
-          
-          if (authUser) {
-            console.log('👤 Auth user in state change, ensuring custom user exists...')
-            await ensureCustomUserExists(authUser)
-            console.log('✅ Custom user setup complete in state change')
-          } else {
-            console.log('❌ No auth user in state change')
-            setCustomUser(null)
-          }
-          
-          console.log('🏁 Auth state change - setting loading to false')
-          setLoading(false)
-        } catch (error) {
-          console.error('💥 Error in auth state change:', error)
-          setLoading(false)
-        }
+  // Set up auth event listeners
+  useEffect(() => {
+    if (isElectron && typeof window !== 'undefined') {
+      // For Electron, listen to Electron auth events
+      const electronAPI = (window as any).electronAPI
+      
+      console.log('🎧 Setting up Electron auth event listeners')
+      
+      // Test IPC communication
+      if (electronAPI.onTestEvent) {
+        electronAPI.onTestEvent((data: any) => {
+          console.log('✅ CONTEXT: test-event received!', data);
+        });
       }
-    )
+      
+      electronAPI.onAuthSuccess(async (data: any) => {
+        console.log('🔔 Auth success event received in context:', data)
+        try {
+          const electronUser = await electronAPI.getUser()
+          console.log('👤 Got Electron user after auth success:', electronUser)
+          if (electronUser) {
+            const supabaseUser = convertElectronUserToSupabaseUser(electronUser)
+            setUser(supabaseUser)
+            await ensureCustomUserExists(supabaseUser)
+            console.log('✅ User state updated after auth success')
+          }
+        } catch (err) {
+          console.error('❌ Error handling auth success in context:', err)
+        }
+      })
 
-    return () => subscription.unsubscribe()
-  }, [supabase.auth])
+      electronAPI.onAuthSignedOut(() => {
+        console.log('🔔 Auth signed out event received in context')
+        setUser(null)
+        setCustomUser(null)
+      })
+
+      return () => {
+        console.log('🧹 Cleaning up Electron auth listeners')
+        electronAPI.removeAuthListeners()
+      }
+    } else if (!isElectron) {
+      // For web, listen for Supabase auth changes
+      const { data: { subscription } } = supabase.auth.onAuthStateChange(
+        async (event, session) => {
+          try {
+            console.log('🔄 Auth state change:', event, session?.user?.email)
+            const authUser = session?.user ?? null
+            setUser(authUser)
+            
+            if (authUser) {
+              console.log('👤 Auth user in state change, ensuring custom user exists...')
+              await ensureCustomUserExists(authUser)
+              console.log('✅ Custom user setup complete in state change')
+            } else {
+              console.log('❌ No auth user in state change')
+              setCustomUser(null)
+            }
+            
+            console.log('🏁 Auth state change - setting loading to false')
+            setLoading(false)
+          } catch (error) {
+            console.error('💥 Error in auth state change:', error)
+            setLoading(false)
+          }
+        }
+      )
+
+      return () => subscription.unsubscribe()
+    }
+  }, [isElectron, supabase.auth, ensureCustomUserExists, convertElectronUserToSupabaseUser])
 
   const signOut = async () => {
-    await supabase.auth.signOut()
+    if (isElectron) {
+      const electronAPI = (window as any).electronAPI
+      await electronAPI.logout()
+    } else {
+      await supabase.auth.signOut()
+    }
+    setUser(null)
     setCustomUser(null)
   }
 

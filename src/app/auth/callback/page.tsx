@@ -22,8 +22,13 @@ export default function AuthCallbackPage() {
 
       console.log('Callback page - code:', !!code, 'error:', errorParam, 'source:', source)
 
+      // Check if this is an IDE flow with a stored redirect URI
+      const ideRedirectUri = sessionStorage.getItem('ide_redirect_uri')
+      console.log('IDE Redirect URI from storage:', ideRedirectUri)
+
       // Check if this is an Electron OAuth flow
       const isElectronFlow = source === 'electron'
+      const isIDEFlow = source === 'ide' && ideRedirectUri
 
       // Handle error
       if (errorParam) {
@@ -48,7 +53,30 @@ export default function AuthCallbackPage() {
           if (data.session) {
             console.log('Session obtained successfully')
 
-            if (isElectronFlow) {
+            if (isIDEFlow) {
+              // For IDE: redirect to the stored redirect URI with token
+              console.log('🔄 IDE flow detected - redirecting to callback server')
+              
+              // Clear the stored redirect URI
+              sessionStorage.removeItem('ide_redirect_uri')
+              
+              // Build redirect URL with token
+              const redirectUrl = new URL(ideRedirectUri)
+              redirectUrl.searchParams.set('token', data.session.access_token)
+              
+              console.log('🔗 Redirecting to:', redirectUrl.toString())
+              setMessage('Authentication successful! Returning to the IDE...')
+
+              // Redirect to the callback server
+              window.location.href = redirectUrl.toString()
+
+              // Show manual instruction after a delay
+              setTimeout(() => {
+                console.log('⏰ Timeout reached - showing manual instruction')
+                setMessage('If the IDE doesn\'t update automatically, please check the application.')
+                setIsLoading(false)
+              }, 2000)
+            } else if (isElectronFlow) {
               // For Electron: redirect to custom protocol with one-time token
               console.log('🔄 Electron flow detected - redirecting to app')
 

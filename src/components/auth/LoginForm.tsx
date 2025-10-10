@@ -23,15 +23,34 @@ export function LoginForm() {
 
     // Set up auth event listeners for Electron
     if (typeof window !== 'undefined' && window.electronAPI?.isElectron) {
-      window.electronAPI.onAuthSuccess((data: any) => {
-        console.log('✅ Auth success received:', data)
+      const electronAPI = window.electronAPI
+      
+      electronAPI.onAuthSuccess(async (data: any) => {
+        console.log('✅ Auth success received in LoginForm:', data)
         setLoading(false)
         setError(null)
-        // Redirect to dashboard
-        router.push('/dashboard')
+        
+        try {
+          // Get the user from Electron (which will use the stored token)
+          const user = await electronAPI.getUser()
+          console.log('👤 User from Electron:', user)
+          
+          // Force a refresh of the Supabase session by checking auth state
+          // This will trigger the auth context to update
+          const { data: { session } } = await supabase.auth.getSession()
+          console.log('🔄 Current session:', session)
+          
+          // Redirect to dashboard
+          console.log('🚀 Redirecting to dashboard...')
+          router.push('/dashboard')
+        } catch (err) {
+          console.error('❌ Error handling auth success:', err)
+          // Still try to redirect
+          router.push('/dashboard')
+        }
       })
 
-      window.electronAPI.onAuthError((error: any) => {
+      electronAPI.onAuthError((error: any) => {
         console.error('❌ Auth error received:', error)
         setError(error)
         setLoading(false)
@@ -39,12 +58,10 @@ export function LoginForm() {
 
       // Cleanup listeners on unmount
       return () => {
-        if (typeof window !== 'undefined' && window.electronAPI?.removeAuthListeners) {
-          window.electronAPI.removeAuthListeners()
-        }
+        electronAPI.removeAuthListeners?.()
       }
     }
-  }, [router])
+  }, [router, supabase.auth])
 
   const handleSignIn = async () => {
     setLoading(true)
@@ -79,9 +96,23 @@ export function LoginForm() {
       // Web flow - use Supabase OAuth
       console.log('🌐 Using web auth flow')
 
+      // Check for IDE source and redirect_uri parameters
+      const source = searchParams.get('source')
+      const redirectUri = searchParams.get('redirect_uri')
+      
+      console.log('Source:', source, 'Redirect URI:', redirectUri)
+
+      // If this is an IDE flow with a redirect_uri, store it in session storage
+      if (source === 'ide' && redirectUri) {
+        sessionStorage.setItem('ide_redirect_uri', redirectUri)
+        console.log('📦 Stored IDE redirect URI:', redirectUri)
+      }
+
       // Always use production URL to avoid localhost/production conflicts
       const redirectUrl = isElectronPlatform
         ? 'https://colabify.xyz/auth/callback?source=electron'
+        : source === 'ide'
+        ? 'https://colabify.xyz/auth/callback?source=ide'
         : 'https://colabify.xyz/auth/callback'
 
       console.log('Redirect URL:', redirectUrl)

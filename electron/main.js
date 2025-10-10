@@ -78,6 +78,15 @@ function createWindow() {
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
+
+  // Test IPC communication after window loads
+  mainWindow.webContents.on('did-finish-load', () => {
+    console.log('🔍 Main: Window finished loading, testing IPC...');
+    setTimeout(() => {
+      mainWindow.webContents.send('test-event', { message: 'IPC test from main process' });
+      console.log('📤 Main: Sent test-event');
+    }, 1000);
+  });
 }
 
 // Handle notification requests from renderer
@@ -121,13 +130,24 @@ ipcMain.handle('auth:start-sign-in', async () => {
     const authResult = await authManager.beginExternalSignIn();
     
     console.log('✅ Authentication successful:', authResult.user.email);
+    console.log('📦 Auth result:', JSON.stringify(authResult, null, 2));
     
     // Notify renderer process of successful authentication
     if (mainWindow) {
+      console.log('📤 Sending auth-success event to renderer...');
       mainWindow.webContents.send('auth-success', {
         user: authResult.user,
         subscriptionStatus: authResult.subscriptionStatus
       });
+      console.log('✅ Event sent successfully');
+      
+      // Also execute console.log in the renderer to verify it's alive
+      mainWindow.webContents.executeJavaScript(`
+        console.log('🎯 MAIN PROCESS: Auth success event sent!');
+        console.log('🎯 MAIN PROCESS: User:', ${JSON.stringify(JSON.stringify(authResult.user))});
+      `).catch(err => console.error('Failed to execute JS in renderer:', err));
+    } else {
+      console.error('⚠️ mainWindow is null, cannot send event');
     }
     
     return { success: true, user: authResult.user };

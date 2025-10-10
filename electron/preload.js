@@ -24,13 +24,25 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Auth event listeners
   onAuthSuccess: (callback) => {
-    ipcRenderer.on('auth-success', (event, data) => callback(data));
+    console.log('🎧 PRELOAD: Setting up auth-success listener');
+    ipcRenderer.on('auth-success', (event, data) => {
+      console.log('🎧 PRELOAD: auth-success event received!', data);
+      callback(data);
+    });
   },
   onAuthError: (callback) => {
-    ipcRenderer.on('auth-error', (event, error) => callback(error));
+    console.log('🎧 PRELOAD: Setting up auth-error listener');
+    ipcRenderer.on('auth-error', (event, error) => {
+      console.log('🎧 PRELOAD: auth-error event received!', error);
+      callback(error);
+    });
   },
   onAuthSignedOut: (callback) => {
-    ipcRenderer.on('auth-signed-out', () => callback());
+    console.log('🎧 PRELOAD: Setting up auth-signed-out listener');
+    ipcRenderer.on('auth-signed-out', () => {
+      console.log('🎧 PRELOAD: auth-signed-out event received!');
+      callback();
+    });
   },
 
   // API calls with stored token
@@ -46,4 +58,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Platform information
   platform: process.platform,
   isElectron: true,
+  
+  // Test IPC listener
+  onTestEvent: (callback) => {
+    console.log('🎧 PRELOAD: Setting up test-event listener');
+    ipcRenderer.on('test-event', (event, data) => {
+      console.log('✅ PRELOAD: test-event received!', data);
+      callback(data);
+    });
+  },
 });
