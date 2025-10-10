@@ -49,18 +49,22 @@ export default function AuthCallbackPage() {
             console.log('Session obtained successfully')
 
             if (isElectronFlow) {
-              // For Electron: redirect to custom protocol with tokens
-              console.log('Electron flow detected - redirecting to app')
+              // For Electron: redirect to custom protocol with one-time token
+              console.log('🔄 Electron flow detected - redirecting to app')
 
-              const electronUrl = `devpulse://auth/callback#access_token=${data.session.access_token}&refresh_token=${data.session.refresh_token}&expires_in=${data.session.expires_in}&token_type=${data.session.token_type}`
+              // Use access token as one-time token for Electron exchange
+              const electronUrl = `colabify://auth/callback?token=${data.session.access_token}`
+              console.log('🔗 Redirecting to Electron URL:', electronUrl)
 
               setMessage('Authentication successful! Returning to the app...')
 
               // Redirect to Electron app
+              console.log('🚀 Attempting window.location.href redirect...')
               window.location.href = electronUrl
 
               // Show manual instruction after a delay
               setTimeout(() => {
+                console.log('⏰ Timeout reached - showing manual instruction')
                 setMessage('If the app doesn\'t open automatically, please open it manually.')
                 setIsLoading(false)
               }, 2000)
@@ -76,16 +80,8 @@ export default function AuthCallbackPage() {
           setIsLoading(false)
         }
       } else {
-        // Check for hash (implicit flow - shouldn't happen but handle it)
-        if (window.location.hash) {
-          const electronUrl = `devpulse://auth/callback${window.location.hash}`
-          console.log('Redirecting to Electron app with hash:', electronUrl)
-          window.location.href = electronUrl
-          setMessage('Returning to the app...')
-        } else {
-          setMessage('No authentication data received.')
-          setIsLoading(false)
-        }
+        setMessage('No authentication data received.')
+        setIsLoading(false)
       }
     }
 

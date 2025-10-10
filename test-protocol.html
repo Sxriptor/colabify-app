@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Protocol Test</title>
+</head>
+<body>
+    <h1>Protocol Test Page</h1>
+    <p>Click the button below to test if the colabify:// protocol works:</p>
+    
+    <button onclick="testProtocol()">Test colabify:// Protocol</button>
+    
+    <script>
+        function testProtocol() {
+            console.log('Testing protocol redirect...');
+            const testUrl = 'colabify://auth/callback?token=test123';
+            console.log('Redirecting to:', testUrl);
+            window.location.href = testUrl;
+        }
+    </script>
+    
+    <p>If the protocol is working, clicking the button should open your Electron app.</p>
+    <p>Check the Electron main process console for logs.</p>
+</body>
+</html>

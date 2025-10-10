@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 
 declare global {
   interface Window {
@@ -10,6 +10,12 @@ declare global {
       openExternalUrl: (url: string) => Promise<{ success: boolean }>;
       onAuthCallback: (callback: (url: string) => void) => void;
       removeAuthCallback: () => void;
+      login: () => Promise<{ success: boolean }>;
+      logout: () => Promise<{ success: boolean }>;
+      getUser: () => Promise<any>;
+      onAuthSuccess: (callback: (data: any) => void) => void;
+      onAuthError: (callback: (error: string) => void) => void;
+      apiCall: (endpoint: string, options?: any) => Promise<any>;
       isElectron: boolean;
     };
   }
@@ -20,86 +26,81 @@ export function LoginForm() {
   const [error, setError] = useState<string | null>(null)
   const supabase = createClient()
   const router = useRouter()
+  const searchParams = useSearchParams()
+
+  // Check if this is an Electron platform request
+  const isElectronPlatform = searchParams.get('platform') === 'electron'
 
   useEffect(() => {
-    // Set up auth callback listener for Electron
+    // Set up auth event listeners for Electron
     if (window.electronAPI?.isElectron) {
-      window.electronAPI.onAuthCallback(async (callbackUrl) => {
-        console.log('Auth callback received:', callbackUrl)
-
-        try {
-          // Parse the URL to extract the hash fragment
-          const url = new URL(callbackUrl)
-          const hashParams = new URLSearchParams(url.hash.substring(1))
-          const accessToken = hashParams.get('access_token')
-          const refreshToken = hashParams.get('refresh_token')
-
-          if (accessToken) {
-            // Set the session in Supabase
-            const { error } = await supabase.auth.setSession({
-              access_token: accessToken,
-              refresh_token: refreshToken || ''
-            })
-
-            if (error) {
-              console.error('Error setting session:', error)
-              setError(error.message)
-            } else {
-              // Redirect to dashboard
-              router.push('/dashboard')
-            }
-          }
-        } catch (err) {
-          console.error('Error processing auth callback:', err)
-          setError('Failed to process authentication')
-        } finally {
-          setLoading(false)
-        }
+      window.electronAPI.onAuthSuccess((data) => {
+        console.log('Auth success received:', data)
+        setLoading(false)
+        // Redirect to dashboard
+        router.push('/dashboard')
       })
 
-      return () => {
-        window.electronAPI?.removeAuthCallback()
-      }
+      window.electronAPI.onAuthError((error) => {
+        console.error('Auth error received:', error)
+        setError(error)
+        setLoading(false)
+      })
     }
-  }, [supabase, router])
+  }, [router])
 
   const handleGitHubLogin = async () => {
     setLoading(true)
     setError(null)
 
-    // Check if running in Electron
-    const isElectron = window.electronAPI?.isElectron
-
-    // Add query parameter to identify Electron flow
-    const redirectUrl = isElectron
-      ? 'https://colabify.xyz/auth/callback?source=electron'
-      : 'https://colabify.xyz/auth/callback'
+    // Check if we're actually in Electron environment
+    const isActuallyElectron = window.electronAPI?.isElectron === true
 
     console.log('🔍 Auth Debug Info:')
-    console.log('Is Electron:', isElectron)
-    console.log('Redirect URL:', redirectUrl)
+    console.log('Is Actually Electron:', isActuallyElectron)
+    console.log('Is Electron Platform Param:', isElectronPlatform)
+    console.log('Has Electron API:', !!window.electronAPI)
 
-    const { data, error } = await supabase.auth.signInWithOAuth({
-      provider: 'github',
-      options: {
-        redirectTo: redirectUrl,
-        skipBrowserRedirect: isElectron, // Prevent automatic redirect in Electron
-      },
-    })
+    if (isActuallyElectron && window.electronAPI) {
+      // Use the Electron auth flow - we're in the actual Electron app
+      try {
+        console.log('🔄 Using Electron auth flow - calling window.electronAPI.login()')
+        const result = await window.electronAPI.login()
+        console.log('✅ Electron login result:', result)
+        // Loading state will be handled by auth success/error callbacks
+      } catch (error) {
+        console.error('❌ Electron login error:', error)
+        setError('Failed to initiate login')
+        setLoading(false)
+      }
+    } else {
+      // Web flow - always use production URL for consistency
+      console.log('Using web auth flow')
 
-    if (error) {
-      console.error('OAuth error:', error)
-      setError(error.message)
-      setLoading(false)
-      return
+      // Always use production URL to avoid localhost/production conflicts
+      const redirectUrl = isElectronPlatform
+        ? 'https://colabify.xyz/auth/callback?source=electron'
+        : 'https://colabify.xyz/auth/callback'
+
+      console.log('Redirect URL:', redirectUrl)
+
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'github',
+        options: {
+          redirectTo: redirectUrl,
+        },
+      })
+
+      console.log('OAuth data:', data)
+      console.log('OAuth error:', error)
+
+      if (error) {
+        console.error('OAuth error:', error)
+        setError(error.message)
+        setLoading(false)
+      }
+      // For web, the browser will handle the redirect automatically
     }
-
-    // For Electron, open the OAuth URL in the default browser
-    if (isElectron && data?.url && window.electronAPI) {
-      console.log('Opening OAuth URL in browser:', data.url)
-      await window.electronAPI.openExternalUrl(data.url)
-    }
-    // For web, the browser will handle the redirect automatically (skipBrowserRedirect is false)
   }
 
   return (

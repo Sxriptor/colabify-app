@@ -16,6 +16,32 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.removeAllListeners('auth-callback');
   },
 
+  // Auth functions
+  login: () => ipcRenderer.invoke('auth:login'),
+  logout: () => ipcRenderer.invoke('auth:logout'),
+  getUser: () => ipcRenderer.invoke('auth:getUser'),
+
+  // Auth event listeners
+  onAuthSuccess: (callback) => {
+    ipcRenderer.on('auth-success', (event, data) => callback(data));
+  },
+  onAuthError: (callback) => {
+    ipcRenderer.on('auth-error', (event, error) => callback(error));
+  },
+
+  // API calls with stored token
+  apiCall: (endpoint, options) => ipcRenderer.invoke('api:call', endpoint, options),
+
+  // Test functions
+  testProtocol: () => ipcRenderer.invoke('test:protocol'),
+  
+  // Manual protocol test
+  testManualProtocol: () => {
+    const testUrl = 'colabify://test/callback?token=test123';
+    console.log('🧪 Testing manual protocol redirect to:', testUrl);
+    window.location.href = testUrl;
+  },
+
   // Platform information
   platform: process.platform,
   isElectron: true,
