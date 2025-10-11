@@ -159,7 +159,7 @@ export function MemberManagement({ projectId, canManage, refreshTrigger }: Membe
         <p className="text-red-600 text-sm">{error}</p>
         <button
           onClick={fetchMembersAndInvitations}
-          className="mt-2 text-blue-600 hover:text-blue-800 text-sm"
+          className="mt-2 text-gray-800 hover:text-gray-900 text-sm"
         >
           Try again
         </button>
@@ -282,8 +282,8 @@ export function MemberManagement({ projectId, canManage, refreshTrigger }: Membe
             {invitations.map((invitation) => (
               <div key={invitation.id} className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
-                    <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center">
+                    <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                     </svg>
                   </div>

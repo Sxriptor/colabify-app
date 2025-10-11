@@ -101,7 +101,7 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-800"></div>
       </div>
     )
   }
@@ -114,7 +114,7 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
           <p className="text-gray-600 mb-4">{error}</p>
           <button
             onClick={() => router.push('/dashboard')}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium"
+            className="bg-gray-800 hover:bg-gray-900 text-white px-4 py-2 rounded-md text-sm font-medium"
           >
             Back to Dashboard
           </button>
@@ -174,7 +174,7 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
                       {project.visibility}
                     </span>
                     {isOwner && (
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
                         Owner
                       </span>
                     )}
@@ -222,7 +222,7 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
                     {isOwner && (
                       <button 
                         onClick={() => setShowConnectRepoModal(true)}
-                        className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-md text-sm font-medium"
+                        className="bg-gray-800 hover:bg-gray-900 text-white px-3 py-2 rounded-md text-sm font-medium"
                       >
                         {project.repositories?.length > 0 ? 'Change Repository' : 'Connect Repository'}
                       </button>
@@ -242,7 +242,7 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
                             <div className="flex items-center space-x-2">
                               <button
                                 onClick={() => handleAddLocalFolder(repo)}
-                                className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+                                className="text-sm text-gray-800 hover:text-gray-900 font-medium"
                               >
                                 Add Local Folder
                               </button>
@@ -250,7 +250,7 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
                                 href={repo.url}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="text-blue-600 hover:text-blue-800 text-sm"
+                                className="text-gray-800 hover:text-gray-900 text-sm"
                               >
                                 View on GitHub
                               </a>
@@ -317,7 +317,7 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
                     {isOwner && (
                       <button 
                         onClick={() => setShowInviteModal(true)}
-                        className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                        className="text-gray-800 hover:text-gray-900 text-sm font-medium"
                       >
                         Invite
                       </button>

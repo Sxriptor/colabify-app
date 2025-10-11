@@ -84,7 +84,7 @@ export function PushNotificationSettings() {
             <button
               onClick={requestPermission}
               disabled={isLoading}
-              className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white px-3 py-1 rounded text-sm font-medium transition-colors duration-200"
+              className="bg-gray-800 hover:bg-gray-900 disabled:bg-gray-400 text-white px-3 py-1 rounded text-sm font-medium transition-colors duration-200"
             >
               {isLoading ? 'Requesting...' : 'Request Permission'}
             </button>
@@ -145,12 +145,12 @@ export function PushNotificationSettings() {
         )}
 
         {/* Information */}
-        <div className="p-3 bg-blue-50 border border-blue-200 rounded-md">
+        <div className="p-3 bg-gray-50 border border-gray-200 rounded-md">
           <div className="flex items-start">
-            <svg className="w-5 h-5 text-blue-400 mr-2 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-5 h-5 text-gray-400 mr-2 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
-            <div className="text-sm text-blue-800">
+            <div className="text-sm text-gray-800">
               <div className="font-medium mb-1">About Push Notifications</div>
               <div>
                 Push notifications allow DevPulse to send you real-time updates about your projects, 

@@ -78,7 +78,7 @@ export function ProjectCard({ project, currentUserId }: ProjectCardProps) {
 
           <div className="flex items-center gap-2 ml-4">
             {isOwner && (
-              <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-blue-100 text-blue-800">
+              <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-gray-100 text-gray-800">
                 Owner
               </span>
             )}

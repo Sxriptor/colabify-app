@@ -138,7 +138,7 @@ export function InviteModal({ isOpen, onClose, projectId, onInviteSuccess }: Inv
                       value={email}
                       onChange={(e) => updateEmail(index, e.target.value)}
                       placeholder="Enter email address"
-                      className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-gray-500 focus:border-transparent"
                     />
                     {emails.length > 1 && (
                       <button
@@ -158,7 +158,7 @@ export function InviteModal({ isOpen, onClose, projectId, onInviteSuccess }: Inv
               <button
                 type="button"
                 onClick={addEmailField}
-                className="mt-2 text-sm text-blue-600 hover:text-blue-800 flex items-center gap-1"
+                className="mt-2 text-sm text-gray-800 hover:text-gray-900 flex items-center gap-1"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -185,7 +185,7 @@ export function InviteModal({ isOpen, onClose, projectId, onInviteSuccess }: Inv
             <button
               type="submit"
               disabled={loading}
-              className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-md flex items-center gap-2"
+              className="px-4 py-2 text-sm font-medium text-white bg-gray-800 hover:bg-gray-900 disabled:opacity-50 disabled:cursor-not-allowed rounded-md flex items-center gap-2"
             >
               {loading && (
                 <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>

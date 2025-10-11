@@ -62,7 +62,7 @@ export default function DebugAuth() {
 
       <button
         onClick={testOAuth}
-        className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
+        className="bg-gray-800 text-white px-4 py-2 rounded hover:bg-gray-900"
       >
         Test GitHub OAuth (Check Console)
       </button>

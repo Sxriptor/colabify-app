@@ -185,7 +185,7 @@ export function AccountSettings() {
                   href={`https://github.com/${settings.github_username}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-blue-600 hover:text-blue-800 text-sm"
+                  className="text-gray-800 hover:text-gray-900 text-sm"
                 >
                   View Profile
                 </a>
