@@ -205,13 +205,7 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
                   </div>
                 </div>
 
-                {isOwner && (
-                  <div className="flex items-center gap-2">
-                    <button className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-2 rounded-md text-sm font-medium">
-                      Settings
-                    </button>
-                  </div>
-                )}
+
               </div>
             </div>
           </div>
@@ -230,7 +224,7 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
                         onClick={() => setShowConnectRepoModal(true)}
                         className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-md text-sm font-medium"
                       >
-                        Connect Repository
+                        {project.repositories?.length > 0 ? 'Change Repository' : 'Connect Repository'}
                       </button>
                     )}
                   </div>
@@ -351,6 +345,7 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
         onClose={() => setShowConnectRepoModal(false)}
         projectId={projectId}
         onSuccess={handleRepositoryConnected}
+        hasExistingRepositories={project?.repositories?.length > 0}
       />
 
       {selectedRepository && (

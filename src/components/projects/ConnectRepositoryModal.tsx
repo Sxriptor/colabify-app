@@ -8,9 +8,10 @@ interface ConnectRepositoryModalProps {
   onClose: () => void
   projectId: string
   onSuccess: () => void
+  hasExistingRepositories?: boolean
 }
 
-export function ConnectRepositoryModal({ isOpen, onClose, projectId, onSuccess }: ConnectRepositoryModalProps) {
+export function ConnectRepositoryModal({ isOpen, onClose, projectId, onSuccess, hasExistingRepositories = false }: ConnectRepositoryModalProps) {
   const { user } = useAuth()
   const [step, setStep] = useState<'url' | 'folder'>('url')
   const [githubUrl, setGithubUrl] = useState('')
@@ -215,7 +216,10 @@ export function ConnectRepositoryModal({ isOpen, onClose, projectId, onSuccess }
         <div className="px-6 py-4 border-b border-gray-200">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-medium text-gray-900">
-              {step === 'url' ? 'Connect Repository' : 'Select Local Folders'}
+              {step === 'url' 
+                ? (hasExistingRepositories ? 'Change Repository' : 'Connect Repository')
+                : 'Select Local Folders'
+              }
             </h2>
             <button
               onClick={handleClose}
@@ -238,6 +242,22 @@ export function ConnectRepositoryModal({ isOpen, onClose, projectId, onSuccess }
 
           {step === 'url' && (
             <div className="space-y-4">
+              {hasExistingRepositories && (
+                <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-md">
+                  <div className="flex">
+                    <svg className="w-5 h-5 text-yellow-400 mr-2 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                    </svg>
+                    <div>
+                      <p className="text-sm text-yellow-800">
+                        <strong>Note:</strong> Changing the repository will add a new repository to this project. 
+                        Existing local folder mappings will remain linked to the previous repository.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
               <div>
                 <label htmlFor="github-url" className="block text-sm font-medium text-gray-700 mb-2">
                   GitHub Repository URL
@@ -251,7 +271,10 @@ export function ConnectRepositoryModal({ isOpen, onClose, projectId, onSuccess }
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
                 <p className="mt-1 text-xs text-gray-500">
-                  Enter the full GitHub URL of the repository you want to connect
+                  {hasExistingRepositories 
+                    ? 'Enter the GitHub URL of the new repository to add to this project'
+                    : 'Enter the full GitHub URL of the repository you want to connect'
+                  }
                 </p>
               </div>
             </div>
@@ -361,7 +384,7 @@ export function ConnectRepositoryModal({ isOpen, onClose, projectId, onSuccess }
             ) : step === 'url' ? (
               'Next'
             ) : (
-              'Connect Repository'
+              hasExistingRepositories ? 'Change Repository' : 'Connect Repository'
             )}
           </button>
         </div>
