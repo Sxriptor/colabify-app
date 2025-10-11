@@ -88,7 +88,7 @@ export async function POST(request: Request) {
     }
 
     // Add owner as project member
-    await supabase
+    const { error: memberError } = await supabase
       .from('project_members')
       .insert({
         project_id: project.id,
@@ -97,6 +97,12 @@ export async function POST(request: Request) {
         status: 'active',
         joined_at: new Date().toISOString(),
       })
+
+    if (memberError) {
+      console.error('Failed to add owner to project_members:', memberError)
+      // Don't fail project creation, but log the error
+      // This is likely an RLS issue - see FIX_PROJECT_MEMBERS_ISSUE.md
+    }
 
     return NextResponse.json({ project }, { status: 201 })
   } catch (error) {

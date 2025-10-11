@@ -2,6 +2,12 @@ import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
 export async function updateSession(request: NextRequest) {
+  // Skip middleware for API routes with Bearer tokens (Electron app uses JWT, not cookies)
+  const authHeader = request.headers.get('Authorization')
+  if (authHeader?.startsWith('Bearer ') && request.nextUrl.pathname.startsWith('/api/')) {
+    return NextResponse.next()
+  }
+
   // Skip middleware for IDE-specific API endpoints (they use Bearer tokens, not cookies)
   if (request.nextUrl.pathname.startsWith('/api/auth/ide-')) {
     return NextResponse.next()

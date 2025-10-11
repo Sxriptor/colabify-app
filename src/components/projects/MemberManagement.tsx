@@ -31,9 +31,10 @@ interface Invitation {
 interface MemberManagementProps {
   projectId: string
   canManage: boolean
+  refreshTrigger?: number
 }
 
-export function MemberManagement({ projectId, canManage }: MemberManagementProps) {
+export function MemberManagement({ projectId, canManage, refreshTrigger }: MemberManagementProps) {
   const [members, setMembers] = useState<Member[]>([])
   const [invitations, setInvitations] = useState<Invitation[]>([])
   const [loading, setLoading] = useState(true)
@@ -41,7 +42,7 @@ export function MemberManagement({ projectId, canManage }: MemberManagementProps
 
   useEffect(() => {
     fetchMembersAndInvitations()
-  }, [projectId])
+  }, [projectId, refreshTrigger])
 
   const fetchMembersAndInvitations = async () => {
     try {

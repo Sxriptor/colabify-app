@@ -140,6 +140,31 @@ export async function handleExistingUserInvitation(
       // Don't fail the operation if we can't update the invitation
     }
 
+    // Create inbox item for the invited user
+    const { data: projectData } = await supabase
+      .from('projects')
+      .select('name')
+      .eq('id', projectId)
+      .single()
+
+    if (projectData) {
+      const { error: inboxError } = await supabase
+        .from('inbox_items')
+        .insert({
+          user_id: userId,
+          type: 'invitation',
+          title: `Added to ${projectData.name}`,
+          message: `You've been added to the project "${projectData.name}"`,
+          link: `/projects/${projectId}`,
+          read: false
+        })
+
+      if (inboxError) {
+        console.error('Failed to create inbox item:', inboxError)
+        // Don't fail the operation if we can't create inbox item
+      }
+    }
+
     return { success: true }
   } catch (error) {
     console.error('Error handling existing user invitation:', error)

@@ -17,6 +17,7 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [showInviteModal, setShowInviteModal] = useState(false)
+  const [refreshTrigger, setRefreshTrigger] = useState(0)
 
   useEffect(() => {
     fetchProject()
@@ -39,6 +40,13 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
             role,
             status,
             user:users(id, name, email, avatar_url)
+          ),
+          invitations:project_invitations!project_invitations_project_id_fkey(
+            id,
+            email,
+            status,
+            created_at,
+            expires_at
           )
         `)
         .eq('id', projectId)
@@ -53,9 +61,11 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
     }
   }
 
-  const handleInviteSuccess = () => {
-    // Refresh project data to show new pending members
-    fetchProject()
+  const handleInviteSuccess = async () => {
+    // Trigger refresh in MemberManagement component
+    // Add small delay to ensure database has committed the changes
+    await new Promise(resolve => setTimeout(resolve, 500))
+    setRefreshTrigger(prev => prev + 1)
   }
 
   if (loading) {
@@ -259,7 +269,7 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
                   </div>
                 </div>
                 <div className="p-6">
-                  <MemberManagement projectId={projectId} canManage={isOwner} />
+                  <MemberManagement projectId={projectId} canManage={isOwner} refreshTrigger={refreshTrigger} />
                 </div>
               </div>
             </div>

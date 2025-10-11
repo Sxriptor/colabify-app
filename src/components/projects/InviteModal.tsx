@@ -57,33 +57,51 @@ export function InviteModal({ isOpen, onClose, projectId, onInviteSuccess }: Inv
     }
 
     try {
-      const { createElectronClient } = await import('@/lib/supabase/electron-client')
-      const supabase = await createElectronClient()
+      // Use the website API to send invitations (which handles email sending)
+      const electronAPI = (window as any).electronAPI
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'https://colabify.xyz'
 
-      // Get current user
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) throw new Error('Not authenticated')
+      const token = await electronAPI.getToken()
+      if (!token) throw new Error('Not authenticated')
 
-      // Create invitations for each email
-      const invitations = validEmails.map(email => ({
-        project_id: projectId,
-        email: email.trim(),
-        invited_by: user.id,
-        status: 'pending',
-        expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), // 7 days
-      }))
+      console.log('Sending invitation request to:', `${baseUrl}/api/projects/${projectId}/invite`)
+      console.log('With emails:', validEmails)
 
-      const { error } = await supabase
-        .from('project_invitations')
-        .insert(invitations)
+      const response = await fetch(`${baseUrl}/api/projects/${projectId}/invite`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          emails: validEmails.map(email => email.trim())
+        }),
+      })
 
-      if (error) throw error
+      console.log('Response status:', response.status)
+      console.log('Response ok:', response.ok)
 
+      const data = await response.json()
+      console.log('Response data:', data)
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to send invitations')
+      }
+
+      console.log('Invitation sent successfully!')
       onInviteSuccess()
       onClose()
       setEmails([''])
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred')
+      console.error('Invitation error:', err)
+      const errorMessage = err instanceof Error ? err.message : 'An error occurred'
+
+      // Provide more helpful error message for CORS issues
+      if (errorMessage.includes('Failed to fetch') || errorMessage === 'An error occurred') {
+        setError('Unable to connect to server. The website middleware needs to be deployed to support Electron app. See DEPLOYMENT_INVITATION_SYSTEM.md')
+      } else {
+        setError(errorMessage)
+      }
     } finally {
       setLoading(false)
     }
