@@ -97,6 +97,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
       console.log(`🔧 PRELOAD: Git connectRepoToProject called for ${projectId} at ${path}`);
       return ipcRenderer.invoke('git:connectRepoToProject', projectId, path);
     },
+    readDirectGitState: (path) => {
+      console.log(`🔧 PRELOAD: Git readDirectGitState called for ${path}`);
+      return ipcRenderer.invoke('git:readDirectGitState', path);
+    },
     onEvent: (callback) => {
       console.log('🎧 PRELOAD: Setting up git:event listener');
       ipcRenderer.on('git:event', (event, data) => {

@@ -12,6 +12,7 @@ class SimpleGitMonitoring {
     if (this.isInitialized) return;
     
     console.log('🚀 Initializing simple Git monitoring...');
+    console.log('📋 About to register IPC handlers...');
     
     // Register basic IPC handlers for testing
     ipcMain.handle('git:watchProject', async (event, projectId, on) => {
@@ -182,6 +183,22 @@ class SimpleGitMonitoring {
       return mockRepoConfig;
     });
 
+    ipcMain.handle('git:readDirectGitState', async (event, repoPath) => {
+      console.log(`📡 Git IPC: Reading Git state directly from ${repoPath} (no searching)`);
+      
+      try {
+        // Read Git state directly from the specified path without any filesystem searching
+        const gitState = await this.getActualGitState(repoPath);
+        console.log(`📊 Direct Git state from ${repoPath}:`, gitState);
+        return gitState;
+      } catch (error) {
+        console.error(`❌ Error reading direct Git state from ${repoPath}:`, error);
+        return null;
+      }
+    });
+    
+    console.log('✅ Registered git:readDirectGitState handler');
+
     // Send test activity events for watched projects
     setInterval(() => {
       if (this.watchedProjects.size > 0 && mainWindow && !mainWindow.isDestroyed()) {
@@ -227,6 +244,13 @@ class SimpleGitMonitoring {
 
     this.isInitialized = true;
     console.log('✅ Simple Git monitoring initialized');
+    console.log('📋 All registered IPC handlers:', [
+      'git:watchProject',
+      'git:listProjectRepos', 
+      'git:getRepoState',
+      'git:connectRepoToProject',
+      'git:readDirectGitState'
+    ]);
     console.log('📋 Integration points:');
     console.log('  - Watches Supabase project_watches table changes');
     console.log('  - Syncs with existing handleWatchToggle() function');
@@ -430,6 +454,7 @@ class SimpleGitMonitoring {
     ipcMain.removeHandler('git:listProjectRepos');
     ipcMain.removeHandler('git:getRepoState');
     ipcMain.removeHandler('git:connectRepoToProject');
+    ipcMain.removeHandler('git:readDirectGitState');
     
     this.watchedProjects.clear();
     this.isInitialized = false;

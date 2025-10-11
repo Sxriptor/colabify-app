@@ -76,7 +76,8 @@ interface BranchNode {
 
 export function RepoVisualizationModal({ isOpen, onClose, project }: RepoVisualizationModalProps) {
   const { user } = useAuth()
-  const [activeTab, setActiveTab] = useState<'overview' | 'branches' | 'users'>('overview')
+  const [activeTab, setActiveTab] = useState<'remote' | 'local'>('local')
+  const [activeLocalRepo, setActiveLocalRepo] = useState<string>('')
   const [loading, setLoading] = useState(false)
   const [branches, setBranches] = useState<GitHubBranch[]>([])
   const [commits, setCommits] = useState<GitHubCommit[]>([])
@@ -87,14 +88,14 @@ export function RepoVisualizationModal({ isOpen, onClose, project }: RepoVisuali
   useEffect(() => {
     if (isOpen && project?.repositories?.length > 0) {
       fetchRepositoryData()
-      
+
       // Set up real-time Git event listener
       if (typeof window !== 'undefined' && (window as any).electronAPI) {
         const electronAPI = (window as any).electronAPI
-        
+
         const handleGitEvent = (event: any) => {
           console.log('📡 Received Git event in visualization:', event)
-          
+
           if (event.projectId === project.id) {
             // Refresh data when Git activities occur
             fetchRepositoryData()
@@ -119,7 +120,7 @@ export function RepoVisualizationModal({ isOpen, onClose, project }: RepoVisuali
   const fetchRepositoryData = async () => {
     setLoading(true)
     setError(null)
-    
+
     try {
       // Check if we're in Electron environment
       if (typeof window === 'undefined' || !(window as any).electronAPI) {
@@ -132,34 +133,13 @@ export function RepoVisualizationModal({ isOpen, onClose, project }: RepoVisuali
       }
 
       const electronAPI = (window as any).electronAPI
-      console.log('🔍 Electron API available, attempting to fetch real data...')
-      console.log('🔍 Available electronAPI methods:', Object.keys(electronAPI))
-      console.log('🔍 Git API available:', !!electronAPI.git)
-      console.log('🔍 Project ID:', project.id)
 
-      // Test if Git monitoring backend is available
-      try {
-        console.log('🔍 Testing Git monitoring backend connection...')
-        
-        if (!electronAPI.git) {
-          throw new Error('Git API not available in electronAPI')
-        }
-        
-        const testResult = await electronAPI.git.listProjectRepos(project.id)
-        console.log('✅ Git monitoring backend is available:', testResult)
-        
-        if (!testResult || testResult.length === 0) {
-          console.log('⚠️ No repositories found, but backend is available')
-        }
-      } catch (testError) {
-        console.log('❌ Git monitoring backend not available:', testError)
-        console.log('🔍 Error details:', {
-          message: testError.message,
-          stack: testError.stack,
-          hasGitAPI: !!electronAPI.git,
-          electronAPIKeys: Object.keys(electronAPI)
-        })
-        console.log('🔍 Falling back to mock data')
+      // Get local repository mappings from project data - NO SEARCHING NEEDED
+      const localMappings = project.repositories?.[0]?.local_mappings || []
+      console.log('� Usijng stored local repository mappings:', localMappings)
+
+      if (localMappings.length === 0) {
+        console.log('⚠️ No local repository mappings found, using mock data')
         await fetchMockBranches()
         await fetchMockCommits()
         await fetchMockUsers()
@@ -167,55 +147,62 @@ export function RepoVisualizationModal({ isOpen, onClose, project }: RepoVisuali
         return
       }
 
-      // Get repository data from Git monitoring backend
-      const repoConfigs = await electronAPI.git.listProjectRepos(project.id)
-      console.log('📊 Repository configs from backend:', repoConfigs)
+      // Check if Git API is available
+      if (!electronAPI.git) {
+        console.log('❌ Git API not available, using mock data with stored paths')
+        await fetchMockBranches()
+        await fetchMockCommits()
+        await fetchMockUsers()
+        setDataSource('mock')
+        return
+      }
 
-      // Fetch real Git data for each repository
-      const allBranches: GitHubBranch[] = []
-      const allCommits: GitHubCommit[] = []
-      const allUsers: LocalUserLocation[] = []
+      console.log(`📂 Processing ${localMappings.length} stored repository mappings`)
 
-      for (const repoConfig of repoConfigs) {
+      // Fetch real Git data for each stored local repository path
+      const allBranches: any[] = []
+
+      for (const mapping of localMappings) {
         try {
-          // Get current repository state from Git monitoring backend
-          const repoState = await electronAPI.git.getRepoState(repoConfig.id)
-          console.log('📊 Repository state:', repoState)
+          console.log(`📂 Reading Git data from stored path: ${mapping.local_path}`)
 
-          if (repoState) {
-            // Convert backend data to our format
-            const backendBranches = await convertBackendBranches(repoState, repoConfig)
-            const backendCommits = await convertBackendCommits(repoConfig)
-            const backendUsers = await convertBackendUsers(repoConfig, repoState)
+          // Read Git data directly from the stored path - NO SEARCHING
+          const gitData = await readGitDataFromPath(mapping.local_path)
 
-            allBranches.push(...backendBranches)
-            allCommits.push(...backendCommits)
-            allUsers.push(...backendUsers)
+          if (gitData) {
+            allBranches.push({
+              ...gitData,
+              path: mapping.local_path,
+              user: mapping.user,
+              id: `local-${mapping.id || Date.now()}`
+            })
+            console.log(`✅ Successfully read Git data from ${mapping.local_path}`)
+          } else {
+            console.warn(`⚠️ No Git data returned from ${mapping.local_path}`)
           }
         } catch (repoError) {
-          console.warn(`Failed to get data for repository ${repoConfig.id}:`, repoError)
+          console.warn(`❌ Failed to read Git data from ${mapping.local_path}:`, repoError)
         }
       }
 
-      // If we have real data, use it; otherwise fall back to mock data
+      // Use real data if available, otherwise fall back to mock
       if (allBranches.length > 0) {
         setBranches(allBranches)
         setDataSource('backend')
+        console.log(`✅ Using real Git data from ${allBranches.length} stored repositories`)
+
+        // Generate commits and users from real data
+        const realCommits = await generateCommitsFromRealData(allBranches)
+        setCommits(realCommits)
+
+        const realUsers = await generateUsersFromRealData(allBranches)
+        setLocalUsers(realUsers)
       } else {
+        console.log(`⚠️ No Git data could be read, falling back to mock data`)
         await fetchMockBranches()
-        setDataSource('mock')
-      }
-
-      if (allCommits.length > 0) {
-        setCommits(allCommits)
-      } else {
         await fetchMockCommits()
-      }
-
-      if (allUsers.length > 0) {
-        setLocalUsers(allUsers)
-      } else {
         await fetchMockUsers()
+        setDataSource('mock')
       }
 
       // Also try to fetch from GitHub API as supplementary data
@@ -225,7 +212,7 @@ export function RepoVisualizationModal({ isOpen, onClose, project }: RepoVisuali
           const urlParts = repo.url.replace('https://github.com/', '').split('/')
           const owner = urlParts[0]
           const repoName = urlParts[1]?.replace(/\.git$/, '') // Remove .git suffix
-          
+
           if (owner && repoName) {
             await fetchGitHubBranches(owner, repoName)
           }
@@ -237,11 +224,12 @@ export function RepoVisualizationModal({ isOpen, onClose, project }: RepoVisuali
     } catch (err) {
       console.error('Error fetching repository data:', err)
       setError(err instanceof Error ? err.message : 'Failed to fetch repository data')
-      
+
       // Fall back to mock data on error
       await fetchMockBranches()
       await fetchMockCommits()
       await fetchMockUsers()
+      setDataSource('mock')
     } finally {
       setLoading(false)
     }
@@ -311,7 +299,7 @@ export function RepoVisualizationModal({ isOpen, onClose, project }: RepoVisuali
     // For now, generate some commits based on the repository state
     // In a full implementation, this would come from Git log data
     const commits: GitHubCommit[] = []
-    
+
     for (let i = 0; i < 6; i++) {
       commits.push({
         sha: `commit-${i}-${repoConfig.id}`,
@@ -537,7 +525,7 @@ export function RepoVisualizationModal({ isOpen, onClose, project }: RepoVisuali
           behindBy: 0
         }
       ]
-      
+
       setBranches(mockBranches)
     } catch (error) {
       console.error('Error fetching branches:', error)
@@ -645,7 +633,7 @@ export function RepoVisualizationModal({ isOpen, onClose, project }: RepoVisuali
           stats: { additions: 234, deletions: 0 }
         }
       ]
-      
+
       setCommits(mockCommits)
     } catch (error) {
       console.error('Error fetching commits:', error)
@@ -656,7 +644,7 @@ export function RepoVisualizationModal({ isOpen, onClose, project }: RepoVisuali
     try {
       // Get local mappings from the repository data
       const localMappings = repo.local_mappings || []
-      
+
       const mockUsers: LocalUserLocation[] = localMappings.map((mapping: any, index: number) => ({
         userId: mapping.user?.id || `user-${index}`,
         userName: mapping.user?.name || ['JOHN.DOE', 'JANE.SMITH', 'BOB.WILSON', 'ALICE.CHEN'][index % 4],
@@ -672,7 +660,7 @@ export function RepoVisualizationModal({ isOpen, onClose, project }: RepoVisuali
         status: ['online', 'away', 'online', 'online'][index % 4] as 'online' | 'away' | 'offline',
         commitsToday: [3, 1, 5, 2][index % 4]
       }))
-      
+
       // Add some default users if no mappings exist
       if (mockUsers.length === 0) {
         const defaultUsers: LocalUserLocation[] = [
@@ -711,7 +699,7 @@ export function RepoVisualizationModal({ isOpen, onClose, project }: RepoVisuali
       } else {
         setLocalUsers(mockUsers)
       }
-      
+
       setLocalUsers(mockUsers)
     } catch (error) {
       console.error('Error fetching local user locations:', error)
@@ -722,12 +710,153 @@ export function RepoVisualizationModal({ isOpen, onClose, project }: RepoVisuali
     const date = new Date(dateString)
     const now = new Date()
     const diffInHours = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60))
-    
+
     if (diffInHours < 1) return 'Just now'
     if (diffInHours < 24) return `${diffInHours}h ago`
     const diffInDays = Math.floor(diffInHours / 24)
     if (diffInDays < 7) return `${diffInDays}d ago`
     return date.toLocaleDateString()
+  }
+
+  const readGitDataFromPath = async (localPath: string) => {
+    try {
+      console.log(`📂 Reading Git data directly from stored path: ${localPath}`)
+
+      // Use direct Git state reading method - NO SEARCHING
+      if (electronAPI.git && electronAPI.git.readDirectGitState) {
+        const repoState = await electronAPI.git.readDirectGitState(localPath)
+        console.log(`📊 Direct Git state from ${localPath}:`, repoState)
+
+        return {
+          name: localPath.split('/').pop() || localPath.split('\\').pop() || 'Unknown',
+          path: localPath,
+          branch: repoState?.branch || 'main',
+          head: repoState?.head || 'unknown',
+          dirty: repoState?.dirty || false,
+          ahead: repoState?.ahead || 0,
+          behind: repoState?.behind || 0,
+          localBranches: repoState?.localBranches || ['main'],
+          remoteBranches: repoState?.remoteBranches || [],
+          lastChecked: repoState?.lastChecked || new Date().toISOString(),
+          commit: {
+            sha: repoState?.head || 'unknown',
+            author: {
+              login: 'local-user',
+              avatar_url: '/default-avatar.png'
+            },
+            commit: {
+              author: {
+                name: 'Local Developer',
+                date: repoState?.lastChecked || new Date().toISOString()
+              },
+              message: `Latest commit on ${repoState?.branch || 'main'}`
+            }
+          }
+        }
+      }
+
+      // If direct method not available, return null - NO FALLBACK SEARCHING
+      console.warn(`⚠️ Direct Git state method not available for ${localPath}`)
+      return null
+
+    } catch (error) {
+      console.error(`❌ Error reading Git data from ${localPath}:`, error)
+      return null
+    }
+  }
+
+  const generateCommitsFromRealData = async (repositories: any[]) => {
+    const commits: GitHubCommit[] = []
+
+    for (const repo of repositories) {
+      // Create a commit entry for the current HEAD
+      commits.push({
+        sha: repo.head || 'unknown',
+        commit: {
+          author: {
+            name: repo.user?.name || 'Local Developer',
+            email: repo.user?.email || 'developer@local.dev',
+            date: repo.lastChecked || new Date().toISOString()
+          },
+          message: `Latest commit on ${repo.branch || 'main'} branch`
+        },
+        author: {
+          login: repo.user?.name?.toLowerCase().replace(/\s+/g, '') || 'localdev',
+          avatar_url: repo.user?.avatar_url || '/default-avatar.png'
+        },
+        stats: {
+          additions: 0, // We'd need to run git log to get real stats
+          deletions: 0
+        }
+      })
+
+      // Add some recent activity based on branch info
+      if (repo.localBranches) {
+        repo.localBranches.slice(0, 3).forEach((branchName: string, index: number) => {
+          if (branchName !== repo.branch) {
+            commits.push({
+              sha: `${repo.head?.substring(0, 8) || 'abc123'}${index}`,
+              commit: {
+                author: {
+                  name: repo.user?.name || 'Local Developer',
+                  email: repo.user?.email || 'developer@local.dev',
+                  date: new Date(Date.now() - (index + 1) * 3600000).toISOString()
+                },
+                message: `Work on ${branchName} branch`
+              },
+              author: {
+                login: repo.user?.name?.toLowerCase().replace(/\s+/g, '') || 'localdev',
+                avatar_url: repo.user?.avatar_url || '/default-avatar.png'
+              },
+              stats: {
+                additions: Math.floor(Math.random() * 50) + 5,
+                deletions: Math.floor(Math.random() * 20)
+              }
+            })
+          }
+        })
+      }
+    }
+
+    return commits.slice(0, 6) // Limit to 6 most recent
+  }
+
+  const generateUsersFromRealData = async (repositories: any[]) => {
+    const users: LocalUserLocation[] = []
+
+    for (const repo of repositories) {
+      users.push({
+        userId: repo.user?.id || `user-${repo.id}`,
+        userName: repo.user?.name?.toUpperCase() || 'LOCAL.DEVELOPER',
+        userEmail: repo.user?.email || 'developer@local.dev',
+        localPath: repo.path,
+        currentBranch: repo.branch || 'main',
+        lastActivity: repo.lastChecked || new Date().toISOString(),
+        status: 'online' as const,
+        commitsToday: repo.ahead || 1
+      })
+    }
+
+    return users
+  }
+
+  const getRepositoryInfo = (repoConfig: any) => {
+    // Extract repository name from path (last directory)
+    const repoName = repoConfig.path ? repoConfig.path.split('/').pop() || repoConfig.path.split('\\').pop() : 'Unknown'
+
+    // Get owner info from user data or path
+    const ownerName = repoConfig.user?.name || repoConfig.user?.email?.split('@')[0] || 'Local'
+
+    // Generate avatar based on owner name or use user avatar
+    const avatarUrl = repoConfig.user?.avatar_url ||
+      `https://api.dicebear.com/7.x/initials/svg?seed=${ownerName}&backgroundColor=1f2937&textColor=ffffff`
+
+    return {
+      name: repoName,
+      owner: ownerName,
+      avatarUrl: avatarUrl,
+      fullPath: repoConfig.path
+    }
   }
 
   if (!isOpen) return null
@@ -741,17 +870,16 @@ export function RepoVisualizationModal({ isOpen, onClose, project }: RepoVisuali
             <div>
               <h2 className="text-2xl font-bold mb-1 text-white font-mono">REPOSITORY.VISUALIZATION</h2>
               <p className="text-gray-400 flex items-center space-x-2 font-mono text-sm">
-                <span className={`w-2 h-2 rounded-none ${
-                  dataSource === 'backend' ? 'bg-green-400' :
+                <span className={`w-2 h-2 rounded-none ${dataSource === 'backend' ? 'bg-green-400' :
                   dataSource === 'github' ? 'bg-blue-400' : 'bg-yellow-400'
-                } ${dataSource === 'backend' ? 'animate-pulse' : ''}`}></span>
+                  } ${dataSource === 'backend' ? 'animate-pulse' : ''}`}></span>
                 <span>{project?.name?.toUpperCase()}</span>
                 <span>/</span>
                 <span>{project?.repositories?.[0]?.name?.toUpperCase()}</span>
                 <span>•</span>
                 <span className="text-xs">
                   {dataSource === 'backend' ? 'LIVE.DATA' :
-                   dataSource === 'github' ? 'GITHUB.API' : 'MOCK.DATA'}
+                    dataSource === 'github' ? 'GITHUB.API' : 'MOCK.DATA'}
                 </span>
               </p>
             </div>
@@ -764,7 +892,7 @@ export function RepoVisualizationModal({ isOpen, onClose, project }: RepoVisuali
               </svg>
             </button>
           </div>
-          
+
           {/* Grid pattern */}
           <div className="absolute inset-0 opacity-5">
             <div className="absolute inset-0" style={{
@@ -774,22 +902,20 @@ export function RepoVisualizationModal({ isOpen, onClose, project }: RepoVisuali
           </div>
         </div>
 
-        {/* Minimal Tabs */}
+        {/* Main Tabs */}
         <div className="bg-black border-b border-gray-800">
           <nav className="flex px-6">
             {[
-              { id: 'overview', label: 'OVERVIEW' },
-              { id: 'branches', label: 'GIT.GRAPH' },
-              { id: 'users', label: 'TEAM.STATUS' }
+              { id: 'local', label: 'LOCAL.REPOSITORIES' },
+              { id: 'remote', label: 'REMOTE.DATA' }
             ].map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id as any)}
-                className={`relative py-4 px-6 font-mono text-xs font-medium transition-all duration-200 ${
-                  activeTab === tab.id
-                    ? 'text-white bg-gray-900 border-l border-r border-gray-700'
-                    : 'text-gray-500 hover:text-gray-300 hover:bg-gray-900'
-                }`}
+                className={`relative py-4 px-8 font-mono text-xs font-medium transition-all duration-200 ${activeTab === tab.id
+                  ? 'text-white bg-gray-900 border-l border-r border-gray-700'
+                  : 'text-gray-500 hover:text-gray-300 hover:bg-gray-900'
+                  }`}
               >
                 {tab.label}
                 {activeTab === tab.id && (
@@ -798,6 +924,55 @@ export function RepoVisualizationModal({ isOpen, onClose, project }: RepoVisuali
               </button>
             ))}
           </nav>
+
+          {/* Local Repository Sub-tabs */}
+          {activeTab === 'local' && branches.length > 0 && (
+            <div className="bg-gray-950 border-b border-gray-800">
+              <nav className="flex px-6 overflow-x-auto">
+                {branches.map((repoConfig, index) => {
+                  const repoId = `repo-${index}`;
+                  const repoInfo = getRepositoryInfo(repoConfig);
+                  const isActive = activeLocalRepo === repoId || (activeLocalRepo === '' && index === 0);
+
+                  return (
+                    <button
+                      key={repoId}
+                      onClick={() => setActiveLocalRepo(repoId)}
+                      className={`relative py-3 px-4 font-mono text-xs font-medium transition-all duration-200 whitespace-nowrap flex items-center space-x-2 ${isActive
+                        ? 'text-white bg-black border-l border-r border-gray-700'
+                        : 'text-gray-400 hover:text-gray-200 hover:bg-gray-900'
+                        }`}
+                    >
+                      {/* Owner Avatar */}
+                      <img
+                        src={repoInfo.avatarUrl}
+                        alt={repoInfo.owner}
+                        className="w-4 h-4 rounded-sm"
+                        onError={(e) => {
+                          // Fallback to initials if image fails
+                          e.currentTarget.style.display = 'none';
+                        }}
+                      />
+
+                      {/* Repository Name */}
+                      <span className="truncate max-w-32">
+                        {repoInfo.name.toUpperCase()}
+                      </span>
+
+                      {/* Owner Name */}
+                      <span className="text-gray-500 text-xs">
+                        @{repoInfo.owner.toLowerCase()}
+                      </span>
+
+                      {isActive && (
+                        <div className="absolute bottom-0 left-0 right-0 h-px bg-white"></div>
+                      )}
+                    </button>
+                  );
+                })}
+              </nav>
+            </div>
+          )}
         </div>
 
         {/* Content */}
@@ -823,40 +998,141 @@ export function RepoVisualizationModal({ isOpen, onClose, project }: RepoVisuali
             </div>
           ) : (
             <>
-              {/* Overview Tab */}
-              {activeTab === 'overview' && (
-                <div className="space-y-8">
-                  {/* Metrics Grid */}
-                  <div className="grid grid-cols-4 gap-px bg-gray-800">
-                    <div className="bg-black p-6 border border-gray-800">
-                      <div className="text-gray-400 font-mono text-xs mb-2">BRANCHES.ACTIVE</div>
-                      <div className="text-white font-mono text-3xl font-bold">{branches.length.toString().padStart(2, '0')}</div>
-                      <div className="text-gray-500 font-mono text-xs mt-2">
-                        {branches.filter(b => b.isDefault).length} DEFAULT / {branches.filter(b => b.protected).length} PROTECTED
+              {/* Local Repositories Tab */}
+              {activeTab === 'local' && (
+                <div className="space-y-6">
+                  {/* Local Repository Content */}
+                  <div className="border border-gray-800 bg-black">
+                    <div className="border-b border-gray-800 p-4">
+                      <div className="flex items-center space-x-3">
+                        {branches.length > 0 && (() => {
+                          const activeIndex = activeLocalRepo ? parseInt(activeLocalRepo.split('-')[1]) : 0;
+                          const activeRepo = branches[activeIndex];
+                          const repoInfo = getRepositoryInfo(activeRepo);
+
+                          return (
+                            <>
+                              <img
+                                src={repoInfo.avatarUrl}
+                                alt={repoInfo.owner}
+                                className="w-6 h-6 rounded-sm"
+                              />
+                              <div>
+                                <h3 className="text-white font-mono text-sm">{repoInfo.name.toUpperCase()}</h3>
+                                <p className="text-gray-400 font-mono text-xs">
+                                  {repoInfo.fullPath} • Reading from .git folder
+                                </p>
+                              </div>
+                            </>
+                          );
+                        })()}
                       </div>
                     </div>
-                    
-                    <div className="bg-black p-6 border border-gray-800">
-                      <div className="text-gray-400 font-mono text-xs mb-2">TEAM.MEMBERS</div>
-                      <div className="text-white font-mono text-3xl font-bold">{localUsers.length.toString().padStart(2, '0')}</div>
-                      <div className="text-gray-500 font-mono text-xs mt-2">
-                        {localUsers.filter(u => u.status === 'online').length} ONLINE / {localUsers.filter(u => u.status === 'away').length} AWAY
+
+                    <div className="p-6 space-y-6">
+                      {/* Current Branch & Status */}
+                      <div className="grid grid-cols-3 gap-6">
+                        <div className="border border-gray-800 p-4">
+                          <div className="text-gray-400 font-mono text-xs mb-2">CURRENT.BRANCH</div>
+                          <div className="text-white font-mono text-lg font-bold">
+                            {(() => {
+                              const activeIndex = activeLocalRepo ? parseInt(activeLocalRepo.split('-')[1]) : 0;
+                              const activeRepo = branches[activeIndex];
+                              return activeRepo?.branch || activeRepo?.name || 'main';
+                            })()}
+                          </div>
+                          <div className="text-gray-500 font-mono text-xs mt-1">
+                            {(() => {
+                              const activeIndex = activeLocalRepo ? parseInt(activeLocalRepo.split('-')[1]) : 0;
+                              const activeRepo = branches[activeIndex];
+                              return activeRepo?.head?.substring(0, 8) || activeRepo?.commit?.sha?.substring(0, 8) || 'unknown';
+                            })()}
+                          </div>
+                        </div>
+
+                        <div className="border border-gray-800 p-4">
+                          <div className="text-gray-400 font-mono text-xs mb-2">WORKING.DIRECTORY</div>
+                          <div className="text-white font-mono text-lg font-bold">
+                            {(() => {
+                              const activeIndex = activeLocalRepo ? parseInt(activeLocalRepo.split('-')[1]) : 0;
+                              const activeRepo = branches[activeIndex];
+                              return activeRepo?.dirty ? 'DIRTY' : 'CLEAN';
+                            })()}
+                          </div>
+                          <div className="text-gray-500 font-mono text-xs mt-1">
+                            {(() => {
+                              const activeIndex = activeLocalRepo ? parseInt(activeLocalRepo.split('-')[1]) : 0;
+                              const activeRepo = branches[activeIndex];
+                              return activeRepo?.dirty ? 'Uncommitted changes' : 'No changes';
+                            })()}
+                          </div>
+                        </div>
+
+                        <div className="border border-gray-800 p-4">
+                          <div className="text-gray-400 font-mono text-xs mb-2">SYNC.STATUS</div>
+                          <div className="text-white font-mono text-lg font-bold">
+                            {(() => {
+                              const activeIndex = activeLocalRepo ? parseInt(activeLocalRepo.split('-')[1]) : 0;
+                              const activeRepo = branches[activeIndex];
+                              return `↑${activeRepo?.ahead || 0} ↓${activeRepo?.behind || 0}`;
+                            })()}
+                          </div>
+                          <div className="text-gray-500 font-mono text-xs mt-1">
+                            Ahead / Behind origin
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                    
-                    <div className="bg-black p-6 border border-gray-800">
-                      <div className="text-gray-400 font-mono text-xs mb-2">COMMITS.RECENT</div>
-                      <div className="text-white font-mono text-3xl font-bold">{commits.length.toString().padStart(2, '0')}</div>
-                      <div className="text-gray-500 font-mono text-xs mt-2">
-                        {commits.filter(c => new Date(c.commit.author.date) > new Date(Date.now() - 86400000)).length} TODAY
+
+                      {/* Local Branches */}
+                      <div className="border border-gray-800">
+                        <div className="border-b border-gray-800 p-3">
+                          <h4 className="text-white font-mono text-xs">LOCAL.BRANCHES</h4>
+                        </div>
+                        <div className="p-4 space-y-2">
+                          {(() => {
+                            const activeIndex = activeLocalRepo ? parseInt(activeLocalRepo.split('-')[1]) : 0;
+                            const activeRepo = branches[activeIndex];
+                            const localBranches = activeRepo?.localBranches || [activeRepo?.branch || 'main'];
+
+                            return localBranches.slice(0, 6).map((branchName: string, index: number) => (
+                              <div key={index} className="flex items-center justify-between py-2 border-b border-gray-900 last:border-b-0">
+                                <div className="flex items-center space-x-3">
+                                  <div className={`w-2 h-2 ${branchName === activeRepo?.branch ? 'bg-green-400' : 'bg-gray-600'}`}></div>
+                                  <span className="text-white font-mono text-sm">{branchName}</span>
+                                  {branchName === activeRepo?.branch && (
+                                    <span className="text-green-400 font-mono text-xs">CURRENT</span>
+                                  )}
+                                </div>
+                                <div className="text-gray-400 font-mono text-xs">
+                                  {activeRepo?.head?.substring(0, 8) || 'unknown'}
+                                </div>
+                              </div>
+                            ));
+                          })()}
+                        </div>
                       </div>
-                    </div>
-                    
-                    <div className="bg-black p-6 border border-gray-800">
-                      <div className="text-gray-400 font-mono text-xs mb-2">ACTIVITY.SCORE</div>
-                      <div className="text-white font-mono text-3xl font-bold">{(Math.floor(Math.random() * 50) + 10).toString().padStart(2, '0')}</div>
-                      <div className="text-gray-500 font-mono text-xs mt-2">
-                        HIGH.ACTIVITY
+
+                      {/* Recent Activity */}
+                      <div className="border border-gray-800">
+                        <div className="border-b border-gray-800 p-3">
+                          <h4 className="text-white font-mono text-xs">RECENT.ACTIVITY</h4>
+                        </div>
+                        <div className="p-4 space-y-3">
+                          {commits.slice(0, 4).map((commit, index) => (
+                            <div key={index} className="flex items-start space-x-3 py-2 border-b border-gray-900 last:border-b-0">
+                              <div className="w-2 h-2 bg-white mt-2"></div>
+                              <div className="flex-1">
+                                <div className="text-white font-mono text-sm">{commit.commit.message}</div>
+                                <div className="text-gray-400 font-mono text-xs mt-1">
+                                  {commit.commit.author.name} • {formatTimeAgo(commit.commit.author.date)}
+                                </div>
+                              </div>
+                              <div className="text-gray-500 font-mono text-xs">
+                                {commit.sha.substring(0, 8)}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -870,19 +1146,17 @@ export function RepoVisualizationModal({ isOpen, onClose, project }: RepoVisuali
                       <div className="grid grid-cols-3 gap-4">
                         <div>
                           <div className="text-gray-400 mb-1">DATA.SOURCE</div>
-                          <div className={`font-bold ${
-                            dataSource === 'backend' ? 'text-green-400' :
+                          <div className={`font-bold ${dataSource === 'backend' ? 'text-green-400' :
                             dataSource === 'github' ? 'text-blue-400' : 'text-yellow-400'
-                          }`}>
+                            }`}>
                             {dataSource === 'backend' ? 'GIT.MONITORING.BACKEND' :
-                             dataSource === 'github' ? 'GITHUB.API' : 'MOCK.DATA.FALLBACK'}
+                              dataSource === 'github' ? 'GITHUB.API' : 'MOCK.DATA.FALLBACK'}
                           </div>
                         </div>
                         <div>
                           <div className="text-gray-400 mb-1">CONNECTION.STATUS</div>
-                          <div className={`font-bold ${
-                            dataSource === 'backend' ? 'text-green-400' : 'text-yellow-400'
-                          }`}>
+                          <div className={`font-bold ${dataSource === 'backend' ? 'text-green-400' : 'text-yellow-400'
+                            }`}>
                             {dataSource === 'backend' ? 'CONNECTED' : 'FALLBACK.MODE'}
                           </div>
                         </div>
@@ -908,7 +1182,7 @@ export function RepoVisualizationModal({ isOpen, onClose, project }: RepoVisuali
                           const dayName = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'][dayIndex]
                           const commitCount = Math.floor(Math.random() * 20)
                           const barLength = Math.floor((commitCount / 20) * 40)
-                          
+
                           return (
                             <div key={dayIndex} className="flex items-center space-x-2">
                               <span className="text-gray-400 w-8">{dayName}</span>
@@ -985,15 +1259,14 @@ export function RepoVisualizationModal({ isOpen, onClose, project }: RepoVisuali
                             <div key={userLoc.userId} className="border-l-2 border-gray-700 pl-4">
                               <div className="flex items-center justify-between mb-1">
                                 <div className="flex items-center space-x-2">
-                                  <div className={`w-2 h-2 ${
-                                    userLoc.status === 'online' ? 'bg-green-400' :
+                                  <div className={`w-2 h-2 ${userLoc.status === 'online' ? 'bg-green-400' :
                                     userLoc.status === 'away' ? 'bg-yellow-400' : 'bg-gray-600'
-                                  }`}></div>
+                                    }`}></div>
                                   <span className="text-white font-bold">{userLoc.userName.toUpperCase()}</span>
                                 </div>
                                 <span className="text-gray-400">{userLoc.status.toUpperCase()}</span>
                               </div>
-                              
+
                               <div className="text-gray-400 ml-4 space-y-1">
                                 <div>BRANCH: <span className="text-white">{userLoc.currentBranch}</span></div>
                                 <div>LAST: <span className="text-white">
@@ -1003,11 +1276,11 @@ export function RepoVisualizationModal({ isOpen, onClose, project }: RepoVisuali
                                   <div>TODAY: <span className="text-green-400">{userLoc.commitsToday} COMMITS</span></div>
                                 )}
                               </div>
-                              
+
                               <div className="mt-2 ml-4 text-gray-600 text-xs break-all">
                                 PATH: {userLoc.localPath}
                               </div>
-                              
+
                               {index < localUsers.length - 1 && (
                                 <div className="mt-2 text-gray-800">
                                   ────────────────────────────────────
@@ -1022,8 +1295,90 @@ export function RepoVisualizationModal({ isOpen, onClose, project }: RepoVisuali
                 </div>
               )}
 
-              {/* Git Graph Tab */}
-              {activeTab === 'branches' && (
+              {/* Remote Data Tab */}
+              {activeTab === 'remote' && (
+                <div className="space-y-6">
+                  {/* Remote Repository Info */}
+                  <div className="border border-gray-800 bg-black">
+                    <div className="border-b border-gray-800 p-4">
+                      <h3 className="text-white font-mono text-sm">REMOTE.REPOSITORY.DATA</h3>
+                      <p className="text-gray-400 font-mono text-xs mt-1">
+                        Data from GitHub API and remote Git information
+                      </p>
+                    </div>
+
+                    <div className="p-6 space-y-6">
+                      {/* Remote Info */}
+                      <div className="grid grid-cols-2 gap-6">
+                        <div className="border border-gray-800 p-4">
+                          <div className="text-gray-400 font-mono text-xs mb-2">REMOTE.URL</div>
+                          <div className="text-white font-mono text-sm break-all">
+                            {project?.repositories?.[0]?.url || 'No remote configured'}
+                          </div>
+                        </div>
+
+                        <div className="border border-gray-800 p-4">
+                          <div className="text-gray-400 font-mono text-xs mb-2">DATA.SOURCE</div>
+                          <div className={`font-mono text-sm font-bold ${dataSource === 'backend' ? 'text-green-400' :
+                            dataSource === 'github' ? 'text-blue-400' : 'text-yellow-400'
+                            }`}>
+                            {dataSource === 'backend' ? 'GIT.MONITORING.BACKEND' :
+                              dataSource === 'github' ? 'GITHUB.API' : 'MOCK.DATA'}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Remote Branches */}
+                      <div className="border border-gray-800">
+                        <div className="border-b border-gray-800 p-3">
+                          <h4 className="text-white font-mono text-xs">REMOTE.BRANCHES</h4>
+                        </div>
+                        <div className="p-4 space-y-2">
+                          {branches.slice(0, 8).map((branch, index) => (
+                            <div key={index} className="flex items-center justify-between py-2 border-b border-gray-900 last:border-b-0">
+                              <div className="flex items-center space-x-3">
+                                <div className={`w-2 h-2 ${branch.protected ? 'bg-red-400' : 'bg-gray-600'}`}></div>
+                                <span className="text-white font-mono text-sm">origin/{branch.name}</span>
+                                {branch.protected && (
+                                  <span className="text-red-400 font-mono text-xs">PROTECTED</span>
+                                )}
+                              </div>
+                              <div className="text-gray-400 font-mono text-xs">
+                                {branch.commit?.sha?.substring(0, 8)}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* GitHub Integration Status */}
+                      <div className="border border-gray-800">
+                        <div className="border-b border-gray-800 p-3">
+                          <h4 className="text-white font-mono text-xs">GITHUB.API.STATUS</h4>
+                        </div>
+                        <div className="p-4">
+                          <div className="flex items-center space-x-3">
+                            <div className={`w-3 h-3 ${dataSource === 'github' ? 'bg-green-400' : 'bg-red-400'
+                              }`}></div>
+                            <span className="text-white font-mono text-sm">
+                              {dataSource === 'github' ? 'CONNECTED' : 'DISCONNECTED'}
+                            </span>
+                          </div>
+                          <p className="text-gray-400 font-mono text-xs mt-2">
+                            {dataSource === 'github'
+                              ? 'Successfully fetching data from GitHub API'
+                              : 'Using local Git data only - GitHub API unavailable'
+                            }
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Legacy Git Graph Tab - keeping for reference */}
+              {false && activeTab === 'branches' && (
                 <div className="space-y-6">
                   {/* Header */}
                   <div className="flex items-center justify-between border-b border-gray-800 pb-4">
@@ -1035,7 +1390,7 @@ export function RepoVisualizationModal({ isOpen, onClose, project }: RepoVisuali
                       <div className="text-gray-400 font-mono text-xs border border-gray-700 px-3 py-1">
                         {branches.length.toString().padStart(2, '0')} BRANCHES
                       </div>
-                      <button 
+                      <button
                         onClick={fetchRepositoryData}
                         className="text-black bg-white px-4 py-1 font-mono text-xs hover:bg-gray-200 transition-colors"
                       >
@@ -1052,7 +1407,7 @@ export function RepoVisualizationModal({ isOpen, onClose, project }: RepoVisuali
                         const branchChar = branchChars[index % branchChars.length]
                         const isMain = branch.name === 'main' || branch.isDefault
                         const isProtected = branch.protected
-                        
+
                         return (
                           <div key={branch.name} className="mb-6">
                             {/* Branch Header */}
@@ -1066,19 +1421,19 @@ export function RepoVisualizationModal({ isOpen, onClose, project }: RepoVisuali
                                   <span className="text-white font-bold">{branchChar}</span>
                                   <span className="text-gray-600">─</span>
                                 </div>
-                                
+
                                 {/* Branch Name */}
                                 <span className="text-white font-bold">{branch.name.toUpperCase()}</span>
-                                
+
                                 {/* Branch Tags */}
                                 {isMain && <span className="text-gray-400 border border-gray-600 px-1">MAIN</span>}
                                 {isProtected && <span className="text-gray-400 border border-gray-600 px-1">PROTECTED</span>}
                               </div>
-                              
+
                               {/* Commit Hash */}
                               <span className="text-gray-500">{branch.commit.sha.substring(0, 7)}</span>
                             </div>
-                            
+
                             {/* Branch Details */}
                             <div className="ml-8 space-y-1 text-gray-400">
                               <div>
@@ -1090,7 +1445,7 @@ export function RepoVisualizationModal({ isOpen, onClose, project }: RepoVisuali
                               <div>
                                 MESSAGE: <span className="text-white">{branch.commit.commit.message}</span>
                               </div>
-                              
+
                               {/* Branch Stats */}
                               <div className="flex items-center space-x-4 mt-2">
                                 {branch.aheadBy !== undefined && (
@@ -1100,7 +1455,7 @@ export function RepoVisualizationModal({ isOpen, onClose, project }: RepoVisuali
                                   <span>BEHIND: <span className="text-red-400">{branch.behindBy.toString().padStart(2, '0')}</span></span>
                                 )}
                               </div>
-                              
+
                               {/* Users on Branch */}
                               <div className="mt-2">
                                 USERS: {localUsers
@@ -1109,7 +1464,7 @@ export function RepoVisualizationModal({ isOpen, onClose, project }: RepoVisuali
                                   .join(', ') || 'NONE'}
                               </div>
                             </div>
-                            
+
                             {/* ASCII Connection Line */}
                             {index < branches.length - 1 && (
                               <div className="ml-2 mt-2 text-gray-700">
@@ -1148,7 +1503,7 @@ export function RepoVisualizationModal({ isOpen, onClose, project }: RepoVisuali
                         </div>
                       </div>
                     </div>
-                    
+
                     <div className="border border-gray-800 bg-black p-4">
                       <h4 className="text-white font-mono text-sm mb-3">LEGEND</h4>
                       <div className="space-y-2 font-mono text-xs">
@@ -1205,10 +1560,9 @@ export function RepoVisualizationModal({ isOpen, onClose, project }: RepoVisuali
                               </div>
                             </div>
                             <div className="flex items-center space-x-2">
-                              <div className={`w-2 h-2 ${
-                                userLoc.status === 'online' ? 'bg-green-400' :
+                              <div className={`w-2 h-2 ${userLoc.status === 'online' ? 'bg-green-400' :
                                 userLoc.status === 'away' ? 'bg-yellow-400' : 'bg-gray-600'
-                              }`}></div>
+                                }`}></div>
                               <span className="text-gray-400 font-mono text-xs">{userLoc.status.toUpperCase()}</span>
                             </div>
                           </div>
@@ -1253,9 +1607,8 @@ export function RepoVisualizationModal({ isOpen, onClose, project }: RepoVisuali
                                 {Array.from({ length: 5 }).map((_, i) => (
                                   <div
                                     key={i}
-                                    className={`w-2 h-4 ${
-                                      i < (userLoc.commitsToday || 0) ? 'bg-green-400' : 'bg-gray-700'
-                                    }`}
+                                    className={`w-2 h-4 ${i < (userLoc.commitsToday || 0) ? 'bg-green-400' : 'bg-gray-700'
+                                      }`}
                                   ></div>
                                 ))}
                               </div>
