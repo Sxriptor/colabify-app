@@ -841,15 +841,60 @@ export function RepoVisualizationModal({ isOpen, onClose, project }: RepoVisuali
   }
 
   const getRepositoryInfo = (repoConfig: any) => {
-    // Extract repository name from path (last directory)
-    const repoName = repoConfig.path ? repoConfig.path.split('/').pop() || repoConfig.path.split('\\').pop() : 'Unknown'
+    let ownerName = 'local'
+    let repoName = 'unknown'
 
-    // Get owner info from user data or path
-    const ownerName = repoConfig.user?.name || repoConfig.user?.email?.split('@')[0] || 'Local'
+    // First, try to extract from the Git remote URLs (most accurate)
+    if (repoConfig.remoteUrls) {
+      // Try 'origin' first, then any other remote
+      const originUrl = repoConfig.remoteUrls.origin || Object.values(repoConfig.remoteUrls)[0]
+      if (originUrl) {
+        try {
+          // Parse GitHub URL from Git remote
+          let cleanUrl = originUrl as string
 
-    // Generate avatar based on owner name or use user avatar
-    const avatarUrl = repoConfig.user?.avatar_url ||
-      `https://api.dicebear.com/7.x/initials/svg?seed=${ownerName}&backgroundColor=1f2937&textColor=ffffff`
+          // Handle SSH format: git@github.com:owner/repo.git
+          if (cleanUrl.startsWith('git@github.com:')) {
+            cleanUrl = cleanUrl.replace('git@github.com:', 'https://github.com/')
+          }
+
+          // Handle HTTPS format: https://github.com/owner/repo.git
+          if (cleanUrl.includes('github.com')) {
+            const match = cleanUrl.match(/github\.com[\/:]([^\/]+)\/([^\/]+?)(?:\.git)?(?:\/)?$/)
+            if (match) {
+              ownerName = match[1] // e.g., "sxriptor"
+              repoName = match[2]  // e.g., "plei-clone"
+            }
+          }
+        } catch (error) {
+          console.warn('Failed to parse Git remote URL:', originUrl, error)
+        }
+      }
+    }
+
+    // Fallback to project remote URL if Git remote parsing failed
+    if (repoName === 'unknown') {
+      const projectRemoteUrl = project?.repositories?.[0]?.url
+      if (projectRemoteUrl) {
+        try {
+          const urlParts = projectRemoteUrl.replace('https://github.com/', '').replace('.git', '').split('/')
+          if (urlParts.length >= 2) {
+            ownerName = urlParts[0]
+            repoName = urlParts[1]
+          }
+        } catch (error) {
+          console.warn('Failed to parse project remote URL:', projectRemoteUrl)
+        }
+      }
+    }
+
+    // Final fallback to local directory name
+    if (repoName === 'unknown') {
+      repoName = repoConfig.path ? repoConfig.path.split('/').pop() || repoConfig.path.split('\\').pop() : 'Unknown'
+    }
+
+    // Generate GitHub avatar URL for the owner
+    const avatarUrl = `https://github.com/${ownerName}.png`
 
     return {
       name: repoName,

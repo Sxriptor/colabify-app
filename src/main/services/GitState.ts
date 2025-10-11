@@ -185,14 +185,16 @@ export class GitState {
         statusShort,
         upstreamInfo,
         localBranches,
-        remoteBranches
+        remoteBranches,
+        remoteUrls
       ] = await Promise.all([
         GitState.getBranch(cwd),
         GitState.getHead(cwd),
         GitState.getStatusShort(cwd),
         GitState.getUpstreamAheadBehind(cwd),
         GitState.listLocalBranches(cwd),
-        GitState.listRemoteBranches(cwd)
+        GitState.listRemoteBranches(cwd),
+        GitState.getRemoteUrls(cwd)
       ])
 
       return {
@@ -203,7 +205,8 @@ export class GitState {
         ahead: upstreamInfo.ahead,
         behind: upstreamInfo.behind,
         localBranches,
-        remoteBranches
+        remoteBranches,
+        remoteUrls
       }
     } catch (error) {
       console.error('Failed to read repository state:', error)
@@ -222,6 +225,65 @@ export class GitState {
     } catch (error) {
       console.warn('Git fetch failed:', error)
       throw error
+    }
+  }
+
+  /**
+   * Get remote URLs for the repository
+   * @param cwd Repository working directory
+   * @returns Object with remote names and their URLs
+   */
+  static async getRemoteUrls(cwd: string): Promise<Record<string, string>> {
+    try {
+      const result = await GitExecutor.exec(['remote', '-v'], cwd)
+      const remotes: Record<string, string> = {}
+      
+      const lines = result.stdout.split('\n')
+      for (const line of lines) {
+        const match = line.match(/^(\w+)\s+(.+?)\s+\(fetch\)$/)
+        if (match) {
+          const [, remoteName, remoteUrl] = match
+          remotes[remoteName] = remoteUrl
+        }
+      }
+      
+      return remotes
+    } catch (error) {
+      console.warn('Failed to get remote URLs:', error)
+      return {}
+    }
+  }
+
+  /**
+   * Parse GitHub owner and repository name from a remote URL
+   * @param remoteUrl Git remote URL
+   * @returns Object with owner and repository name, or null if not a GitHub URL
+   */
+  static parseGitHubUrl(remoteUrl: string): { owner: string; repo: string } | null {
+    try {
+      // Handle different GitHub URL formats
+      let cleanUrl = remoteUrl
+      
+      // SSH format: git@github.com:owner/repo.git
+      if (cleanUrl.startsWith('git@github.com:')) {
+        cleanUrl = cleanUrl.replace('git@github.com:', 'https://github.com/')
+      }
+      
+      // HTTPS format: https://github.com/owner/repo.git
+      if (cleanUrl.includes('github.com')) {
+        const match = cleanUrl.match(/github\.com[\/:]([^\/]+)\/([^\/]+?)(?:\.git)?(?:\/)?$/)
+        if (match) {
+          return {
+            owner: match[1],
+            repo: match[2]
+          }
+        }
+      }
+      
+      return null
+    } catch (error) {
+      console.warn('Failed to parse GitHub URL:', remoteUrl, error)
+      return null
     }
   }
 

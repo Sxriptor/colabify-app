@@ -39,6 +39,7 @@ export class GitIPC {
     ipcMain.handle('git:listProjectRepos', this.handleListProjectRepos.bind(this))
     ipcMain.handle('git:getRepoState', this.handleGetRepoState.bind(this))
     ipcMain.handle('git:connectRepoToProject', this.handleConnectRepoToProject.bind(this))
+    ipcMain.handle('git:readDirectGitState', this.handleReadDirectGitState.bind(this))
     
     console.log('✅ Git monitoring IPC handlers registered')
   }
@@ -159,6 +160,35 @@ export class GitIPC {
   }
 
   /**
+   * Handle git:readDirectGitState IPC call
+   * Reads Git state directly from a path without searching or storing
+   */
+  private async handleReadDirectGitState(event: any, path: string): Promise<RepoState | null> {
+    try {
+      console.log(`📡 Git IPC: Reading Git state directly from ${path} (no searching)`)
+      
+      // Validate that the path is a Git repository
+      const isGitRepo = await GitExecutor.isGitRepository(path)
+      if (!isGitRepo) {
+        console.warn(`Path is not a Git repository: ${path}`)
+        return null
+      }
+
+      // Get the repository root path
+      const repoRoot = await GitExecutor.getRepositoryRoot(path)
+      
+      // Read repository state directly
+      const repoState = await GitState.readRepoState(repoRoot)
+      
+      console.log(`✅ Git IPC: Successfully read Git state from ${path}`)
+      return repoState
+    } catch (error) {
+      console.error(`❌ Git IPC: Failed to read Git state from ${path}:`, error)
+      return null
+    }
+  }
+
+  /**
    * Emit activity event to renderer process
    */
   private emitActivity(activity: Activity): void {
@@ -235,6 +265,7 @@ export class GitIPC {
     ipcMain.removeHandler('git:listProjectRepos')
     ipcMain.removeHandler('git:getRepoState')
     ipcMain.removeHandler('git:connectRepoToProject')
+    ipcMain.removeHandler('git:readDirectGitState')
     
     console.log('✅ Git monitoring IPC handlers cleaned up')
   }

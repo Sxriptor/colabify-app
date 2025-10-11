@@ -27,6 +27,7 @@ export interface RepoState {
   behind: number         // Commits behind upstream
   remoteBranches: string[] // List of remote branch names
   localBranches: string[]  // List of local branch names
+  remoteUrls?: Record<string, string> // Remote URLs (e.g., {"origin": "https://github.com/user/repo.git"})
 }
 
 // Activity Events
