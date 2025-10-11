@@ -1,5 +1,5 @@
-import { SettingsContent } from '@/components/settings/SettingsContent'
+import { TabbedSettingsContent } from '@/components/settings/TabbedSettingsContent'
 
 export default function SettingsPage() {
-  return <SettingsContent />
+  return <TabbedSettingsContent />
 }

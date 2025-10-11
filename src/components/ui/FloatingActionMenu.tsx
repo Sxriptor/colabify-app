@@ -1,14 +1,22 @@
 'use client'
 
 import { useAuth } from '@/lib/auth/context'
-import { useRouter } from 'next/navigation'
+import { useRouter, usePathname } from 'next/navigation'
 
 export function FloatingActionMenu() {
   const { signOut } = useAuth()
   const router = useRouter()
+  const pathname = usePathname()
 
   const handleSettingsClick = () => {
-    router.push('/settings')
+    // Check if we're currently in a project
+    const projectMatch = pathname?.match(/^\/projects\/([^\/]+)/)
+    if (projectMatch) {
+      const projectId = projectMatch[1]
+      router.push(`/settings?project=${projectId}`)
+    } else {
+      router.push('/settings')
+    }
   }
 
   const handleInboxClick = () => {
