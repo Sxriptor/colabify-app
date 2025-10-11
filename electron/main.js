@@ -126,39 +126,49 @@ ipcMain.handle('open-external-url', async (event, url) => {
 ipcMain.handle('auth:start-sign-in', async () => {
   try {
     console.log('🚀 Starting external sign-in process...');
-    
+    console.log('📋 Current window state:', {
+      hasMainWindow: !!mainWindow,
+      isDestroyed: mainWindow ? mainWindow.isDestroyed() : 'N/A',
+      isVisible: mainWindow ? mainWindow.isVisible() : 'N/A'
+    });
+
     const authResult = await authManager.beginExternalSignIn();
-    
-    console.log('✅ Authentication successful:', authResult.user.email);
-    console.log('📦 Auth result:', JSON.stringify(authResult, null, 2));
-    
+
+    console.log('✅ Authentication successful:', authResult.user?.email || 'no email');
+    console.log('📦 Auth result keys:', Object.keys(authResult));
+    console.log('📦 Full auth result:', JSON.stringify(authResult, null, 2));
+
     // Notify renderer process of successful authentication
-    if (mainWindow) {
+    if (mainWindow && !mainWindow.isDestroyed()) {
       console.log('📤 Sending auth-success event to renderer...');
-      mainWindow.webContents.send('auth-success', {
+      const eventData = {
         user: authResult.user,
         subscriptionStatus: authResult.subscriptionStatus
-      });
+      };
+      console.log('📦 Event data:', JSON.stringify(eventData, null, 2));
+
+      mainWindow.webContents.send('auth-success', eventData);
       console.log('✅ Event sent successfully');
-      
+
       // Also execute console.log in the renderer to verify it's alive
       mainWindow.webContents.executeJavaScript(`
         console.log('🎯 MAIN PROCESS: Auth success event sent!');
         console.log('🎯 MAIN PROCESS: User:', ${JSON.stringify(JSON.stringify(authResult.user))});
       `).catch(err => console.error('Failed to execute JS in renderer:', err));
     } else {
-      console.error('⚠️ mainWindow is null, cannot send event');
+      console.error('⚠️ mainWindow is null or destroyed, cannot send event');
     }
-    
+
     return { success: true, user: authResult.user };
   } catch (error) {
     console.error('❌ Authentication failed:', error);
-    
+    console.error('❌ Error stack:', error.stack);
+
     // Notify renderer process of auth error
-    if (mainWindow) {
+    if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('auth-error', error.message);
     }
-    
+
     return { success: false, error: error.message };
   }
 });

@@ -1,10 +1,28 @@
 import { createClient } from '@/lib/supabase/server'
+import { createClient as createDirectClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const supabase = await createClient()
-    
+    // Check if request has Bearer token (from Electron app)
+    const authHeader = request.headers.get('Authorization')
+    let supabase
+
+    if (authHeader?.startsWith('Bearer ')) {
+      // Use direct client with token for Electron app
+      const token = authHeader.replace('Bearer ', '')
+      supabase = createDirectClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        {
+          global: { headers: { Authorization: `Bearer ${token}` } }
+        }
+      )
+    } else {
+      // Use cookie-based client for web browser
+      supabase = await createClient()
+    }
+
     const { data: { user }, error: authError } = await supabase.auth.getUser()
     
     if (authError || !user) {

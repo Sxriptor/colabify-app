@@ -24,22 +24,31 @@ export function LoginForm() {
     // Set up auth event listeners for Electron
     if (typeof window !== 'undefined' && window.electronAPI?.isElectron) {
       const electronAPI = window.electronAPI
-      
+
+      console.log('🎧 LoginForm: Setting up auth event listeners...')
+
+      // Test if test-event listener works
+      if (electronAPI.onTestEvent) {
+        electronAPI.onTestEvent((data: any) => {
+          console.log('✅ LoginForm: test-event received!', data)
+        })
+      }
+
       electronAPI.onAuthSuccess(async (data: any) => {
-        console.log('✅ Auth success received in LoginForm:', data)
+        console.log('✅ LoginForm: Auth success received!', data)
         setLoading(false)
         setError(null)
-        
+
         try {
           // Get the user from Electron (which will use the stored token)
           const user = await electronAPI.getUser()
           console.log('👤 User from Electron:', user)
-          
+
           // Force a refresh of the Supabase session by checking auth state
           // This will trigger the auth context to update
           const { data: { session } } = await supabase.auth.getSession()
           console.log('🔄 Current session:', session)
-          
+
           // Redirect to dashboard
           console.log('🚀 Redirecting to dashboard...')
           router.push('/dashboard')
@@ -51,15 +60,20 @@ export function LoginForm() {
       })
 
       electronAPI.onAuthError((error: any) => {
-        console.error('❌ Auth error received:', error)
+        console.error('❌ LoginForm: Auth error received:', error)
         setError(error)
         setLoading(false)
       })
 
+      console.log('✅ LoginForm: Auth event listeners set up complete')
+
       // Cleanup listeners on unmount
       return () => {
+        console.log('🧹 LoginForm: Cleaning up auth listeners')
         electronAPI.removeAuthListeners?.()
       }
+    } else {
+      console.log('⚠️ LoginForm: Not in Electron, skipping event listeners')
     }
   }, [router, supabase.auth])
 

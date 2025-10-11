@@ -56,19 +56,32 @@ export default function AuthCallbackPage() {
             if (isIDEFlow) {
               // For IDE: redirect to the stored redirect URI with token
               console.log('🔄 IDE flow detected - redirecting to callback server')
-              
-              // Clear the stored redirect URI
-              sessionStorage.removeItem('ide_redirect_uri')
-              
+              console.log('📍 IDE redirect URI:', ideRedirectUri)
+
               // Build redirect URL with token
               const redirectUrl = new URL(ideRedirectUri)
               redirectUrl.searchParams.set('token', data.session.access_token)
-              
-              console.log('🔗 Redirecting to:', redirectUrl.toString())
+
+              console.log('🔗 Full redirect URL:', redirectUrl.toString())
+              console.log('🔗 Redirect protocol:', redirectUrl.protocol)
+              console.log('🔗 Redirect host:', redirectUrl.host)
+
               setMessage('Authentication successful! Returning to the IDE...')
 
+              // Clear the stored redirect URI AFTER we use it
+              sessionStorage.removeItem('ide_redirect_uri')
+
               // Redirect to the callback server
-              window.location.href = redirectUrl.toString()
+              console.log('🚀 Attempting redirect via window.location.href...')
+
+              try {
+                window.location.href = redirectUrl.toString()
+                console.log('✅ Redirect initiated')
+              } catch (err) {
+                console.error('❌ Redirect failed:', err)
+                setMessage('Failed to redirect. Please copy this URL: ' + redirectUrl.toString())
+                setIsLoading(false)
+              }
 
               // Show manual instruction after a delay
               setTimeout(() => {

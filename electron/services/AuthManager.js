@@ -43,19 +43,29 @@ class AuthManager {
     return new Promise((resolve, reject) => {
       this.callbackServer = http.createServer((req, res) => {
         const url = new URL(req.url, `http://localhost:${port}`);
-        
-        console.log('🔗 Callback received:', url.pathname, url.search);
 
-        if (url.pathname === '/callback') {
+        console.log('🔗 Callback received:', url.pathname, url.search);
+        console.log('📋 Full URL:', req.url);
+
+        if (url.pathname === '/auth/callback') {
           const token = url.searchParams.get('token');
           const expiresAt = url.searchParams.get('expires_at');
           const subscriptionStatus = url.searchParams.get('subscription_status');
           const error = url.searchParams.get('error');
 
+          console.log('🔍 Callback params:', {
+            hasToken: !!token,
+            tokenLength: token?.length,
+            expiresAt,
+            subscriptionStatus,
+            error
+          });
+
           // Send response to browser
           res.writeHead(200, { 'Content-Type': 'text/html' });
-          
+
           if (error) {
+            console.log('❌ Error in callback:', error);
             res.end(`
               <html>
                 <head><title>Authentication Error</title></head>
@@ -68,6 +78,7 @@ class AuthManager {
             `);
             this.authPromise?.reject(new Error(error));
           } else if (token) {
+            console.log('✅ Token received, processing authentication...');
             res.end(`
               <html>
                 <head><title>Authentication Successful</title></head>
@@ -80,10 +91,15 @@ class AuthManager {
                 </body>
               </html>
             `);
-            
+
             // Process the successful authentication
-            this.processAuthCallback(token, expiresAt, subscriptionStatus);
+            console.log('🔄 Calling processAuthCallback...');
+            this.processAuthCallback(token, expiresAt, subscriptionStatus)
+              .catch(err => {
+                console.error('❌ Error in processAuthCallback:', err);
+              });
           } else {
+            console.log('❌ No token in callback');
             res.end(`
               <html>
                 <head><title>Authentication Error</title></head>
@@ -99,6 +115,7 @@ class AuthManager {
 
           // Close server after handling callback
           setTimeout(() => {
+            console.log('🔒 Closing callback server...');
             this.callbackServer?.close();
             this.callbackServer = null;
           }, 1000);
@@ -125,34 +142,56 @@ class AuthManager {
   async processAuthCallback(token, expiresAt, subscriptionStatus) {
     try {
       console.log('🔄 Processing auth callback...');
-      console.log('📥 Token received (first 50 chars):', token.substring(0, 50) + '...');
-      
+      console.log('📥 Token received (first 50 chars):', token ? token.substring(0, 50) + '...' : 'NO TOKEN');
+      console.log('📥 Expires at:', expiresAt);
+      console.log('📥 Subscription status:', subscriptionStatus);
+
+      if (!token) {
+        throw new Error('No token provided to processAuthCallback');
+      }
+
       // Store token securely
       console.log('💾 Storing token in keytar...');
       await this.storeToken(token, expiresAt);
       console.log('✅ Token stored successfully');
-      
+
       // Get user info from the token
       console.log('👤 Fetching user info from API...');
+      console.log('🌐 API URL: https://colabify.xyz/api/auth/user');
+
       const userInfo = await this.getUserInfo(token);
-      console.log('✅ User info received:', userInfo.email);
+      console.log('✅ User info received:', userInfo?.email || 'no email');
+      console.log('📦 User info keys:', Object.keys(userInfo || {}));
       console.log('📦 Full user info:', JSON.stringify(userInfo, null, 2));
-      
-      console.log('✅ Authentication successful for:', userInfo.email);
-      
+
+      console.log('✅ Authentication successful for:', userInfo?.email || 'unknown user');
+
       // Resolve the auth promise
       console.log('🎯 Resolving auth promise...');
-      this.authPromise?.resolve({
-        user: userInfo,
-        token,
-        expiresAt,
-        subscriptionStatus
-      });
-      console.log('✅ Auth promise resolved');
-      
+      console.log('🎯 Auth promise exists?', !!this.authPromise);
+
+      if (this.authPromise) {
+        this.authPromise.resolve({
+          user: userInfo,
+          token,
+          expiresAt,
+          subscriptionStatus
+        });
+        console.log('✅ Auth promise resolved');
+      } else {
+        console.warn('⚠️ No auth promise to resolve!');
+      }
+
     } catch (error) {
       console.error('❌ Error processing auth callback:', error);
-      this.authPromise?.reject(error);
+      console.error('❌ Error message:', error.message);
+      console.error('❌ Error stack:', error.stack);
+
+      if (this.authPromise) {
+        this.authPromise.reject(error);
+      } else {
+        console.error('⚠️ No auth promise to reject error to!');
+      }
     }
   }
 
@@ -161,23 +200,52 @@ class AuthManager {
    */
   async getUserInfo(token) {
     try {
-      // Always use production URL for consistency
-      const response = await fetch('https://colabify.xyz/api/auth/user', {
+      console.log('📡 Fetching user info...');
+      console.log('🔑 Token (first 20 chars):', token.substring(0, 20) + '...');
+
+      // Use IDE-specific endpoint that accepts Bearer tokens
+      const url = 'https://colabify.xyz/api/auth/user';
+      console.log('🌐 Request URL:', url);
+
+      const response = await fetch(url, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         }
       });
 
+      console.log('📨 Response status:', response.status);
+      console.log('📨 Response ok?', response.ok);
+      console.log('📨 Content-Type:', response.headers.get('content-type'));
+
       if (!response.ok) {
-        throw new Error(`Failed to get user info: ${response.status}`);
+        const errorText = await response.text();
+        console.error('❌ Response error text:', errorText);
+        throw new Error(`Failed to get user info: ${response.status} - ${errorText}`);
+      }
+
+      // Check if response is actually JSON
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        const text = await response.text();
+        console.error('❌ Response is not JSON. Content-Type:', contentType);
+        console.error('❌ Response body (first 500 chars):', text.substring(0, 500));
+        throw new Error(`API returned HTML instead of JSON. The endpoint may not exist on the server yet.`);
       }
 
       const data = await response.json();
+      console.log('📦 Response data keys:', Object.keys(data));
+      console.log('📦 Has user property?', 'user' in data);
+
       // The API returns { user: profile }, so unwrap it
-      return data.user || data;
+      const userInfo = data.user || data;
+      console.log('✅ Returning user info:', userInfo?.email || 'no email');
+
+      return userInfo;
     } catch (error) {
-      console.error('Error getting user info:', error);
+      console.error('❌ Error getting user info:', error);
+      console.error('❌ Error type:', error.constructor.name);
+      console.error('❌ Error message:', error.message);
       throw error;
     }
   }
@@ -251,11 +319,11 @@ class AuthManager {
       await this.startCallbackServer(port);
       
       // Build redirect URI
-      const redirectUri = `http://localhost:${port}/callback`;
+      const redirectUri = `http://localhost:${port}/auth/callback`;
       
       // Build auth URL - using your account management system
       const authUrl = `https://colabify.xyz/login?source=ide&redirect_uri=${encodeURIComponent(redirectUri)}`;
-      
+
       console.log('🌐 Opening auth URL:', authUrl);
       
       // Open external browser

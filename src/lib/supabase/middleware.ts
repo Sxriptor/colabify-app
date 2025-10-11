@@ -2,6 +2,11 @@ import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
 export async function updateSession(request: NextRequest) {
+  // Skip middleware for IDE-specific API endpoints (they use Bearer tokens, not cookies)
+  if (request.nextUrl.pathname.startsWith('/api/auth/ide-')) {
+    return NextResponse.next()
+  }
+
   let supabaseResponse = NextResponse.next({
     request,
   })
