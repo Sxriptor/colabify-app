@@ -1,10 +1,11 @@
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute'
 import { ProjectDetailContent } from '@/components/projects/ProjectDetailContent'
 
-export default function ProjectDetailPage({ params }: { params: { id: string } }) {
+export default async function ProjectDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
   return (
     <ProtectedRoute>
-      <ProjectDetailContent projectId={params.id} />
+      <ProjectDetailContent projectId={id} />
     </ProtectedRoute>
   )
 }

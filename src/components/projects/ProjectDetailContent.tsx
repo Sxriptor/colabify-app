@@ -24,14 +24,28 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
 
   const fetchProject = async () => {
     try {
-      const response = await fetch(`/api/projects/${projectId}`)
-      const data = await response.json()
+      // Import dynamically to avoid SSR issues
+      const { createElectronClient } = await import('@/lib/supabase/electron-client')
+      const supabase = await createElectronClient()
 
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to fetch project')
-      }
+      const { data, error } = await supabase
+        .from('projects')
+        .select(`
+          *,
+          owner:users!projects_owner_id_fkey(id, name, email, avatar_url),
+          repositories(id, name, full_name, url),
+          members:project_members(
+            id,
+            role,
+            status,
+            user:users(id, name, email, avatar_url)
+          )
+        `)
+        .eq('id', projectId)
+        .single()
 
-      setProject(data.project)
+      if (error) throw error
+      setProject(data)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred')
     } finally {
