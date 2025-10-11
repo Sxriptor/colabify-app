@@ -166,11 +166,10 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
                 <div className="flex-1">
                   <div className="flex items-center gap-3 mb-2">
                     <h1 className="text-2xl font-bold text-gray-900">{project.name}</h1>
-                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                      project.visibility === 'public' 
-                        ? 'bg-green-100 text-green-800' 
-                        : 'bg-gray-100 text-gray-800'
-                    }`}>
+                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${project.visibility === 'public'
+                      ? 'bg-green-100 text-green-800'
+                      : 'bg-gray-100 text-gray-800'
+                      }`}>
                       {project.visibility}
                     </span>
                     {isOwner && (
@@ -179,7 +178,7 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
                       </span>
                     )}
                   </div>
-                  
+
                   {project.description && (
                     <p className="text-gray-600 mb-4">{project.description}</p>
                   )}
@@ -191,7 +190,7 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
                       </svg>
                       <span>{activeMemberCount} member{activeMemberCount !== 1 ? 's' : ''}</span>
                     </div>
-                    
+
                     <div className="flex items-center gap-1">
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
@@ -204,129 +203,128 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
                     </div>
                   </div>
                 </div>
+              </div>
 
+            </div>
+          </div>
+        </div>
 
+        {/* Project Content */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Main Content */}
+          <div className="lg:col-span-2 space-y-6">
+            {/* Repositories */}
+            <div className="bg-white shadow rounded-lg">
+              <div className="px-6 py-4 border-b border-gray-200">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-lg font-medium text-gray-900">Repositories</h2>
+                  {isOwner && (
+                    <button
+                      onClick={() => setShowConnectRepoModal(true)}
+                      className="bg-gray-800 hover:bg-gray-900 text-white px-3 py-2 rounded-md text-sm font-medium"
+                    >
+                      {project.repositories?.length > 0 ? 'Change Repository' : 'Connect Repository'}
+                    </button>
+                  )}
+                </div>
+              </div>
+              <div className="p-6">
+                {project.repositories?.length > 0 ? (
+                  <div className="space-y-4">
+                    {project.repositories.map((repo: any) => (
+                      <div key={repo.id} className="border border-gray-200 rounded-md">
+                        <div className="flex items-center justify-between p-3 border-b border-gray-100">
+                          <div className="flex-1">
+                            <h3 className="font-medium text-gray-900">{repo.name}</h3>
+                            <p className="text-sm text-gray-500">{repo.full_name}</p>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <button
+                              onClick={() => handleAddLocalFolder(repo)}
+                              className="text-sm text-gray-800 hover:text-gray-900 font-medium"
+                            >
+                              Add Local Folder
+                            </button>
+                            <a
+                              href={repo.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-gray-800 hover:text-gray-900 text-sm"
+                            >
+                              View on GitHub
+                            </a>
+                          </div>
+                        </div>
+
+                        {/* Local folder mappings */}
+                        {repo.local_mappings && repo.local_mappings.length > 0 && (
+                          <div className="p-3 bg-gray-50">
+                            <h4 className="text-sm font-medium text-gray-700 mb-2">Local Folders:</h4>
+                            <div className="space-y-1">
+                              {repo.local_mappings.map((mapping: any) => (
+                                <div key={mapping.id} className="flex items-center justify-between text-sm">
+                                  <span className="text-gray-600 font-mono truncate flex-1" title={mapping.local_path}>
+                                    {mapping.local_path}
+                                  </span>
+                                  <span className="text-gray-500 ml-2">
+                                    ({mapping.user.name || mapping.user.email})
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-8">
+                    <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                    </svg>
+                    <h3 className="mt-2 text-sm font-medium text-gray-900">No repositories</h3>
+                    <p className="mt-1 text-sm text-gray-500">Connect your first GitHub repository to start receiving notifications.</p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Activity Feed */}
+            <div className="bg-white shadow rounded-lg">
+              <div className="px-6 py-4 border-b border-gray-200">
+                <h2 className="text-lg font-medium text-gray-900">Recent Activity</h2>
+              </div>
+              <div className="p-6">
+                <div className="text-center py-8">
+                  <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <h3 className="mt-2 text-sm font-medium text-gray-900">No activity yet</h3>
+                  <p className="mt-1 text-sm text-gray-500">Activity will appear here once you connect repositories.</p>
+                </div>
               </div>
             </div>
           </div>
 
-          {/* Project Content */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Main Content */}
-            <div className="lg:col-span-2 space-y-6">
-              {/* Repositories */}
-              <div className="bg-white shadow rounded-lg">
-                <div className="px-6 py-4 border-b border-gray-200">
-                  <div className="flex items-center justify-between">
-                    <h2 className="text-lg font-medium text-gray-900">Repositories</h2>
-                    {isOwner && (
-                      <button 
-                        onClick={() => setShowConnectRepoModal(true)}
-                        className="bg-gray-800 hover:bg-gray-900 text-white px-3 py-2 rounded-md text-sm font-medium"
-                      >
-                        {project.repositories?.length > 0 ? 'Change Repository' : 'Connect Repository'}
-                      </button>
-                    )}
-                  </div>
-                </div>
-                <div className="p-6">
-                  {project.repositories?.length > 0 ? (
-                    <div className="space-y-4">
-                      {project.repositories.map((repo: any) => (
-                        <div key={repo.id} className="border border-gray-200 rounded-md">
-                          <div className="flex items-center justify-between p-3 border-b border-gray-100">
-                            <div className="flex-1">
-                              <h3 className="font-medium text-gray-900">{repo.name}</h3>
-                              <p className="text-sm text-gray-500">{repo.full_name}</p>
-                            </div>
-                            <div className="flex items-center space-x-2">
-                              <button
-                                onClick={() => handleAddLocalFolder(repo)}
-                                className="text-sm text-gray-800 hover:text-gray-900 font-medium"
-                              >
-                                Add Local Folder
-                              </button>
-                              <a
-                                href={repo.url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-gray-800 hover:text-gray-900 text-sm"
-                              >
-                                View on GitHub
-                              </a>
-                            </div>
-                          </div>
-                          
-                          {/* Local folder mappings */}
-                          {repo.local_mappings && repo.local_mappings.length > 0 && (
-                            <div className="p-3 bg-gray-50">
-                              <h4 className="text-sm font-medium text-gray-700 mb-2">Local Folders:</h4>
-                              <div className="space-y-1">
-                                {repo.local_mappings.map((mapping: any) => (
-                                  <div key={mapping.id} className="flex items-center justify-between text-sm">
-                                    <span className="text-gray-600 font-mono truncate flex-1" title={mapping.local_path}>
-                                      {mapping.local_path}
-                                    </span>
-                                    <span className="text-gray-500 ml-2">
-                                      ({mapping.user.name || mapping.user.email})
-                                    </span>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="text-center py-8">
-                      <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-                      </svg>
-                      <h3 className="mt-2 text-sm font-medium text-gray-900">No repositories</h3>
-                      <p className="mt-1 text-sm text-gray-500">Connect your first GitHub repository to start receiving notifications.</p>
-                    </div>
+          {/* Sidebar */}
+          <div className="space-y-6">
+            {/* Team Members */}
+            <div className="bg-white shadow rounded-lg">
+              <div className="px-6 py-4 border-b border-gray-200">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-lg font-medium text-gray-900">Team Members</h2>
+                  {isOwner && (
+                    <button
+                      onClick={() => setShowInviteModal(true)}
+                      className="text-gray-800 hover:text-gray-900 text-sm font-medium"
+                    >
+                      Invite
+                    </button>
                   )}
                 </div>
               </div>
-
-              {/* Activity Feed */}
-              <div className="bg-white shadow rounded-lg">
-                <div className="px-6 py-4 border-b border-gray-200">
-                  <h2 className="text-lg font-medium text-gray-900">Recent Activity</h2>
-                </div>
-                <div className="p-6">
-                  <div className="text-center py-8">
-                    <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    <h3 className="mt-2 text-sm font-medium text-gray-900">No activity yet</h3>
-                    <p className="mt-1 text-sm text-gray-500">Activity will appear here once you connect repositories.</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Sidebar */}
-            <div className="space-y-6">
-              {/* Team Members */}
-              <div className="bg-white shadow rounded-lg">
-                <div className="px-6 py-4 border-b border-gray-200">
-                  <div className="flex items-center justify-between">
-                    <h2 className="text-lg font-medium text-gray-900">Team Members</h2>
-                    {isOwner && (
-                      <button 
-                        onClick={() => setShowInviteModal(true)}
-                        className="text-gray-800 hover:text-gray-900 text-sm font-medium"
-                      >
-                        Invite
-                      </button>
-                    )}
-                  </div>
-                </div>
-                <div className="p-6">
-                  <MemberManagement projectId={projectId} canManage={isOwner} refreshTrigger={refreshTrigger} />
-                </div>
+              <div className="p-6">
+                <MemberManagement projectId={projectId} canManage={isOwner} refreshTrigger={refreshTrigger} />
               </div>
             </div>
           </div>
@@ -348,19 +346,21 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
         hasExistingRepositories={project?.repositories?.length > 0}
       />
 
-      {selectedRepository && (
-        <AddLocalFolderModal
-          isOpen={showAddFolderModal}
-          onClose={() => {
-            setShowAddFolderModal(false)
-            setSelectedRepository(null)
-          }}
-          repositoryId={selectedRepository.id}
-          projectId={projectId}
-          repositoryName={selectedRepository.name}
-          onSuccess={handleLocalFolderAdded}
-        />
-      )}
-    </div>
+      {
+        selectedRepository && (
+          <AddLocalFolderModal
+            isOpen={showAddFolderModal}
+            onClose={() => {
+              setShowAddFolderModal(false)
+              setSelectedRepository(null)
+            }}
+            repositoryId={selectedRepository.id}
+            projectId={projectId}
+            repositoryName={selectedRepository.name}
+            onSuccess={handleLocalFolderAdded}
+          />
+        )
+      }
+    </div >
   )
 }

@@ -2,11 +2,58 @@
 
 import { useAuth } from '@/lib/auth/context'
 import { useRouter, usePathname } from 'next/navigation'
+import { useState, useEffect } from 'react'
+import { RepoVisualizationModal } from '../projects/RepoVisualizationModal'
 
 export function FloatingActionMenu() {
   const { signOut } = useAuth()
   const router = useRouter()
   const pathname = usePathname()
+  const [showRepoVisualization, setShowRepoVisualization] = useState(false)
+  const [currentProject, setCurrentProject] = useState<any>(null)
+
+  // Check if we're on a project page and fetch project data
+  useEffect(() => {
+    const projectMatch = pathname?.match(/^\/projects\/([^\/]+)/)
+    if (projectMatch) {
+      const projectId = projectMatch[1]
+      fetchProjectData(projectId)
+    } else {
+      setCurrentProject(null)
+    }
+  }, [pathname])
+
+  const fetchProjectData = async (projectId: string) => {
+    try {
+      const { createElectronClient } = await import('@/lib/supabase/electron-client')
+      const supabase = await createElectronClient()
+
+      const { data, error } = await supabase
+        .from('projects')
+        .select(`
+          *,
+          repositories(
+            id, 
+            name, 
+            full_name, 
+            url,
+            local_mappings:repository_local_mappings(
+              id,
+              local_path,
+              user:users(id, name, email)
+            )
+          )
+        `)
+        .eq('id', projectId)
+        .single()
+
+      if (error) throw error
+      setCurrentProject(data)
+    } catch (error) {
+      console.error('Error fetching project data:', error)
+      setCurrentProject(null)
+    }
+  }
 
   const handleSettingsClick = () => {
     // Check if we're currently in a project
@@ -24,18 +71,34 @@ export function FloatingActionMenu() {
   }
 
   return (
-    <div className="fixed bottom-6 right-6 z-50">
-      <div className="bg-gray-800 rounded-lg shadow-lg p-2 flex flex-col gap-1">
-        {/* Inbox Button */}
-        <button
-          onClick={handleInboxClick}
-          className="text-white hover:bg-gray-700 transition-colors duration-200 rounded p-3"
-          title="Inbox"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0H4m16 0l-2-2m2 2l-2 2M4 13l2-2m-2 2l2 2" />
-          </svg>
-        </button>
+    <>
+      <div className="fixed bottom-6 right-6 z-50">
+        <div className="bg-gray-800 rounded-lg shadow-lg p-2 flex flex-col gap-1">
+          {/* Repository Visualization Button - Only show on project pages with repositories */}
+          {currentProject && currentProject.repositories?.length > 0 && (
+            <button
+              onClick={() => setShowRepoVisualization(true)}
+              className="text-white bg-blue-600 hover:bg-blue-700 transition-colors duration-200 rounded p-3 relative"
+              title="Repository Visualization"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+              </svg>
+              {/* Small indicator dot */}
+              <div className="absolute -top-1 -right-1 w-3 h-3 bg-green-400 rounded-full border-2 border-gray-800"></div>
+            </button>
+          )}
+
+          {/* Inbox Button */}
+          <button
+            onClick={handleInboxClick}
+            className="text-white hover:bg-gray-700 transition-colors duration-200 rounded p-3"
+            title="Inbox"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0H4m16 0l-2-2m2 2l-2 2M4 13l2-2m-2 2l2 2" />
+            </svg>
+          </button>
 
         {/* Settings Button */}
         <button
@@ -61,5 +124,15 @@ export function FloatingActionMenu() {
         </button>
       </div>
     </div>
+
+    {/* Repository Visualization Modal */}
+    {currentProject && (
+      <RepoVisualizationModal
+        isOpen={showRepoVisualization}
+        onClose={() => setShowRepoVisualization(false)}
+        project={currentProject}
+      />
+    )}
+  </>
   )
 }
