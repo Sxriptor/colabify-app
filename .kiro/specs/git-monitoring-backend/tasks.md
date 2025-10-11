@@ -63,7 +63,7 @@
     - Test activity event generation for various Git operations
     - _Requirements: 1.1, 1.2, 1.3, 7.1_
 
-- [-] 5. Implement project-level monitoring and remote polling
+- [x] 5. Implement project-level monitoring and remote polling
   - [x] 5.1 Create ProjectWatcher for coordinating multiple repositories
     - Write services/ProjectWatcher.ts to manage multiple GitWatchers
     - Implement project-level start/stop functionality for repository monitoring
@@ -82,14 +82,14 @@
     - Test push detection accuracy with reflog analysis
     - _Requirements: 2.1, 2.2, 4.1, 4.2_
 
-- [ ] 6. Create IPC communication layer
-  - [ ] 6.1 Implement Git monitoring IPC handlers
+- [x] 6. Create IPC communication layer
+  - [x] 6.1 Implement Git monitoring IPC handlers
     - Write main/ipc/GitIPC.ts with IPC method handlers
     - Implement git:watchProject, git:listProjectRepos, and git:getRepoState methods
     - Add git:connectRepoToProject method for dynamic repository addition
     - _Requirements: 6.1, 6.2, 6.3, 6.4_
 
-  - [ ] 6.2 Add event emission system for activity updates
+  - [x] 6.2 Add event emission system for activity updates
     - Implement git:event channel for sending activities to renderer process
     - Create event payload formatting for different activity types
     - Add error event handling and propagation to frontend
@@ -101,14 +101,14 @@
     - Test error handling and propagation through IPC layer
     - _Requirements: 6.1, 6.2, 6.3, 6.4, 6.5_
 
-- [ ] 7. Integrate with main Electron process
-  - [ ] 7.1 Update main process initialization
+- [x] 7. Integrate with main Electron process
+  - [x] 7.1 Update main process initialization
     - Modify electron/main.js to initialize Git monitoring system
     - Add automatic restoration of project watching states on app startup
     - Integrate GitIPC handlers with existing IPC infrastructure
     - _Requirements: 1.4, 6.1_
 
-  - [ ] 7.2 Add project watch state synchronization
+  - [x] 7.2 Add project watch state synchronization
     - Connect existing project watch toggle functionality to Git monitoring backend
     - Implement automatic GitWatcher startup when projects are set to watching
     - Add cleanup and resource management for stopped watchers
@@ -120,14 +120,14 @@
     - Test resource cleanup and memory management
     - _Requirements: 1.4, 6.1, 6.4, 7.5_
 
-- [ ] 8. Add error handling and performance optimization
-  - [ ] 8.1 Implement comprehensive error handling
+- [x] 8. Add error handling and performance optimization
+  - [x] 8.1 Implement comprehensive error handling
     - Add graceful degradation for Git command failures
     - Implement error recovery and retry logic for transient failures
     - Create detailed error logging and user-friendly error messages
     - _Requirements: 2.3, 5.4, 6.5_
 
-  - [ ] 8.2 Optimize performance and resource usage
+  - [x] 8.2 Optimize performance and resource usage
     - Implement efficient debouncing to prevent event spam
     - Add memory management for long-running watchers
     - Optimize Git command execution for minimal resource usage

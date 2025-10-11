@@ -88,6 +88,9 @@ function createWindow() {
   // Show window when ready to prevent visual flash
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
+    
+    // Initialize Git monitoring backend after window is ready
+    initializeGitMonitoring(mainWindow);
   });
 
   // Prevent navigation to external URLs (for OAuth flow)
@@ -275,6 +278,24 @@ ipcMain.handle('api:call', async (event, endpoint, options = {}) => {
 
 console.log('✅ All IPC handlers registered');
 
+// Initialize Git monitoring backend
+let gitMonitoringBackend;
+
+// Function to initialize Git monitoring (called after window is ready)
+async function initializeGitMonitoring(mainWindow) {
+  try {
+    // Dynamic import for TypeScript modules
+    const gitModule = await import('../src/main/index.js');
+    gitMonitoringBackend = gitModule.gitMonitoringBackend;
+    
+    await gitMonitoringBackend.initialize(mainWindow);
+    console.log('✅ Git monitoring backend initialized');
+  } catch (error) {
+    console.error('❌ Failed to initialize Git monitoring backend:', error);
+    console.error('This is expected in development - Git monitoring will be available after TypeScript compilation');
+  }
+}
+
 // No protocol testing needed with external browser auth
 
 // Single instance handling (keep window focus behavior)
@@ -308,6 +329,21 @@ app.whenReady().then(() => {
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit();
+  }
+});
+
+// Cleanup Git monitoring backend on app quit
+app.on('before-quit', async (event) => {
+  if (gitMonitoringBackend && gitMonitoringBackend.isInitialized()) {
+    event.preventDefault();
+    
+    try {
+      await gitMonitoringBackend.cleanup();
+      app.quit();
+    } catch (error) {
+      console.error('❌ Error during Git monitoring cleanup:', error);
+      app.quit();
+    }
   }
 });
 

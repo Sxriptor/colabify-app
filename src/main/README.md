@@ -13,7 +13,8 @@ src/main/
 │   ├── GitState.ts            # Git command execution and state reading
 │   ├── GitWatcher.ts          # Individual repository file system monitoring
 │   ├── ProjectWatcher.ts      # Project-level repository coordination
-│   └── ProjectWatcherManager.ts # Manager for all project watchers
+│   ├── ProjectWatcherManager.ts # Manager for all project watchers
+│   └── ActivityDetector.ts    # Repository state comparison and activity detection
 ├── store/
 │   └── RepoStore.ts           # JSON-based repository configuration storage
 └── util/
@@ -23,13 +24,15 @@ src/main/
 ## Implementation Status
 
 - ✅ **Task 1**: Project structure and core interfaces
-- ⏳ **Task 2**: Git command execution utilities (GitExecutor, GitState)
-- ⏳ **Task 3**: Repository state management and storage (RepoStore)
-- ⏳ **Task 4**: File system monitoring (GitWatcher)
-- ⏳ **Task 5**: Project-level monitoring (ProjectWatcher, ProjectWatcherManager)
-- ⏳ **Task 6**: IPC communication layer (GitIPC)
-- ⏳ **Task 7**: Electron main process integration
-- ⏳ **Task 8**: Error handling and performance optimization
+- ✅ **Task 2**: Git command execution utilities (GitExecutor, GitState)
+- ✅ **Task 3**: Repository state management and storage (RepoStore, ActivityDetector)
+- ✅ **Task 4**: File system monitoring (GitWatcher)
+- ✅ **Task 5**: Project-level monitoring (ProjectWatcher, ProjectWatcherManager)
+- ✅ **Task 6**: IPC communication layer (GitIPC)
+- ✅ **Task 7**: Electron main process integration
+- ✅ **Task 8**: Error handling and performance optimization
+
+**🎉 All core implementation tasks completed!**
 
 ## Usage
 
