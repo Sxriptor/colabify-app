@@ -15,7 +15,7 @@ at InboxContent.tsx:219
 
 ## Root Cause
 
-The issue was caused by **missing Row Level Security (RLS) policies** on three tables:
+The issue was caused by **missing Row Level Security (RLS) policies** on four tables:
 
 ### 1. `project_invitations` Table
 The original RLS policies only allowed:
@@ -49,9 +49,21 @@ owner:users!projects_owner_id_fkey(id, name, email, avatar_url)
 
 The `owner` field would return `null`, causing "Cannot read properties of null" errors in components.
 
+### 4. `project_members` Table
+The INSERT policy only allowed:
+- ✅ Project owners to add members
+- ❌ **Invited users could NOT add themselves when accepting invitations**
+
+When trying to accept an invitation:
+```typescript
+await supabase.from('project_members').insert({ project_id, user_id, role: 'member' })
+```
+
+The query would fail with `403 Forbidden` because the invited user is not the project owner.
+
 ## Solution
 
-The fix involves updating RLS policies on both tables to allow invited users appropriate access.
+The fix involves updating RLS policies on all four tables to allow invited users appropriate access.
 
 ### Changes Made
 
@@ -62,13 +74,18 @@ The fix involves updating RLS policies on both tables to allow invited users app
 2. **Added new `projects` RLS policy**:
    - Allow users to view basic information about projects they have pending invitations for
 
-3. **Added defensive error handling** in `InboxContent.tsx`:
-   - Skip rendering invitations with missing data
+3. **Updated `project_members` INSERT policy**:
+   - Allow invited users to insert themselves when accepting invitations
+   - Still allows project owners to add any member
+
+4. **Added defensive error handling** in components:
+   - Skip rendering invitations with missing data in `InboxContent.tsx`
+   - Safe null handling for owner data in `ProjectCard.tsx`
    - Log errors to console for debugging
 
 ### Files Modified
 
-- ✅ `database/migrations/fix_invitation_rls_policies.sql` - New migration with RLS fixes (3 tables)
+- ✅ `database/migrations/fix_invitation_rls_policies.sql` - New migration with RLS fixes (4 tables)
 - ✅ `database/migrations/fix_invitation_rls_policies_cleanup.sql` - Cleanup script
 - ✅ `src/components/inbox/InboxContent.tsx` - Added null safety checks
 - ✅ `src/components/projects/ProjectCard.tsx` - Added null safety checks
@@ -186,6 +203,20 @@ ON projects FOR SELECT USING (
     has_pending_invitation(id, auth.uid())
 );
 ```
+
+### 5. Updates `project_members` INSERT Policy
+
+```sql
+-- Allow project owners AND invited users to insert members
+CREATE POLICY "project_members_insert" ON project_members
+    FOR INSERT WITH CHECK (
+        is_project_owner(project_id, auth.uid())  -- Owners can add anyone
+        OR
+        (user_id = auth.uid() AND has_pending_invitation(project_id, auth.uid()))  -- Invited users can add themselves
+    );
+```
+
+This is crucial for the "Accept" button to work - invited users need permission to add themselves as active members.
 
 ## Verification Steps
 

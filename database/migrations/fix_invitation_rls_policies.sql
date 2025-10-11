@@ -4,22 +4,25 @@
 --
 -- PROBLEM: Invited users cannot see invitations in their inbox
 --
--- ROOT CAUSE: Missing RLS policies on 3 tables:
+-- ROOT CAUSE: Missing RLS policies on 4 tables:
 --   1. project_invitations - invited users can't view invitations sent to them
 --   2. users - users can't view owner/member info for projects they have access to
 --   3. projects - invited users can't view project details for pending invitations
+--   4. project_members - invited users can't add themselves when accepting invitations
 --
 -- SOLUTION: Add comprehensive RLS policies while avoiding circular dependencies
 --   - Create helper function with SECURITY DEFINER to bypass RLS
 --   - Update project_invitations policies to allow invited users
 --   - Update users policies to allow viewing project-related users
 --   - Add projects policy to allow viewing invited projects
+--   - Update project_members INSERT policy to allow invited users to accept
 --
 -- FIXES:
 --   - Empty inbox for invited users
 --   - "Cannot read properties of null" errors for project.owner
 --   - "Cannot read properties of null" errors for invitation.project
 --   - 500 errors from circular RLS dependencies
+--   - 403 Forbidden errors when accepting invitations
 --
 -- ============================================
 
@@ -133,6 +136,28 @@ CREATE POLICY "Users can view projects they are invited to" ON projects
     );
 
 -- ============================================
+-- FIX PROJECT_MEMBERS TABLE POLICIES
+-- ============================================
+
+-- Drop existing INSERT policy to replace with one that allows invited users to accept
+DROP POLICY IF EXISTS "project_members_insert" ON project_members;
+
+-- Create new INSERT policy that allows:
+-- 1. Project owners to add members
+-- 2. Invited users to add themselves when accepting invitations
+CREATE POLICY "project_members_insert" ON project_members
+    FOR INSERT WITH CHECK (
+        -- Project owners can add anyone
+        is_project_owner(project_id, auth.uid())
+        OR
+        -- Users can add themselves if they have a pending invitation
+        (
+            user_id = auth.uid()
+            AND has_pending_invitation(project_id, auth.uid())
+        )
+    );
+
+-- ============================================
 -- DOCUMENTATION
 -- ============================================
 
@@ -148,4 +173,7 @@ COMMENT ON POLICY "Users can view projects they are invited to" ON projects IS
 
 COMMENT ON FUNCTION has_pending_invitation IS 
 'Helper function to check if a user has a pending invitation to a project. Uses SECURITY DEFINER to bypass RLS and avoid circular dependencies.';
+
+COMMENT ON POLICY "project_members_insert" ON project_members IS 
+'Allows project owners to add members, and invited users to add themselves when accepting invitations';
 
