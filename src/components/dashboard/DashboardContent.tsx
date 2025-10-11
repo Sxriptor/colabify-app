@@ -33,6 +33,10 @@ export function DashboardContent() {
             role,
             status,
             user:users(id, name, email, avatar_url)
+          ),
+          watches:project_watches!project_watches_project_id_fkey(
+            id,
+            user_id
           )
         `)
         .order('created_at', { ascending: false })
@@ -49,6 +53,58 @@ export function DashboardContent() {
   const handleProjectCreated = (project: any) => {
     setProjects(prev => [project, ...prev])
     setShowCreateForm(false)
+  }
+
+  const handleWatchToggle = async (projectId: string, isWatching: boolean) => {
+    try {
+      const { createElectronClient } = await import('@/lib/supabase/electron-client')
+      const supabase = await createElectronClient()
+
+      if (isWatching) {
+        // Remove watch
+        const { error } = await supabase
+          .from('project_watches')
+          .delete()
+          .eq('project_id', projectId)
+          .eq('user_id', user?.id)
+
+        if (error) throw error
+      } else {
+        // Add watch
+        const { error } = await supabase
+          .from('project_watches')
+          .insert({
+            project_id: projectId,
+            user_id: user?.id
+          })
+
+        if (error) throw error
+      }
+
+      // Update local state
+      setProjects(prev => prev.map(project => {
+        if (project.id === projectId) {
+          const currentUserId = user?.id
+          if (isWatching) {
+            // Remove the watch
+            return {
+              ...project,
+              watches: project.watches?.filter((watch: any) => watch.user_id !== currentUserId) || []
+            }
+          } else {
+            // Add the watch
+            return {
+              ...project,
+              watches: [...(project.watches || []), { id: 'temp', user_id: currentUserId }]
+            }
+          }
+        }
+        return project
+      }))
+    } catch (err) {
+      console.error('Error toggling watch:', err)
+      // You might want to show a toast notification here
+    }
   }
 
 
@@ -134,6 +190,7 @@ export function DashboardContent() {
                   key={project.id}
                   project={project}
                   currentUserId={customUser?.id || user?.id || ''}
+                  onWatchToggle={handleWatchToggle}
                 />
               ))}
             </div>
