@@ -142,41 +142,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     getInitialSession()
-
-    // Set up periodic auth check for Electron to catch auth state changes
-    let authCheckInterval: NodeJS.Timeout | null = null
-    if (checkIsElectron()) {
-      authCheckInterval = setInterval(async () => {
-        try {
-          const electronAPI = (window as any).electronAPI
-          const isAuthenticated = await electronAPI.isAuthenticated()
-          
-          // If auth state changed, update context
-          if (isAuthenticated && !user) {
-            console.log('🔄 Periodic check: Auth state changed, updating context')
-            const electronUser = await electronAPI.getUser()
-            if (electronUser) {
-              const supabaseUser = convertElectronUserToSupabaseUser(electronUser)
-              setUser(supabaseUser)
-              await ensureCustomUserExists(supabaseUser)
-            }
-          } else if (!isAuthenticated && user) {
-            console.log('🔄 Periodic check: User signed out, clearing context')
-            setUser(null)
-            setCustomUser(null)
-          }
-        } catch (err) {
-          console.error('❌ Error in periodic auth check:', err)
-        }
-      }, 2000) // Check every 2 seconds
-    }
-
-    return () => {
-      if (authCheckInterval) {
-        clearInterval(authCheckInterval)
-      }
-    }
-  }, [supabase.auth, ensureCustomUserExists, convertElectronUserToSupabaseUser, user])
+  }, [supabase.auth, ensureCustomUserExists, convertElectronUserToSupabaseUser])
 
   // Set up auth event listeners
   useEffect(() => {
@@ -209,9 +175,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               setUser(supabaseUser)
               await ensureCustomUserExists(supabaseUser)
               console.log('✅ User state updated after auth success')
-              
-              // Force a state update by triggering a re-render
-              setUser(prev => ({ ...supabaseUser }))
             }
           }
         } catch (err) {

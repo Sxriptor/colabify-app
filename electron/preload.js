@@ -60,6 +60,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
   platform: process.platform,
   isElectron: true,
   
+  // File system operations
+  selectFolder: () => {
+    console.log('📁 PRELOAD: selectFolder called');
+    return ipcRenderer.invoke('fs:select-folder');
+  },
+  testFolderSelection: () => {
+    console.log('🧪 PRELOAD: testFolderSelection called');
+    return ipcRenderer.invoke('test:folder-selection');
+  },
+  
   // Test IPC listener
   onTestEvent: (callback) => {
     console.log('🎧 PRELOAD: Setting up test-event listener');

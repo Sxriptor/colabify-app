@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/auth/context'
 import { InviteModal } from './InviteModal'
 import { MemberManagement } from './MemberManagement'
+import { ConnectRepositoryModal } from './ConnectRepositoryModal'
+import { AddLocalFolderModal } from './AddLocalFolderModal'
 
 interface ProjectDetailContentProps {
   projectId: string
@@ -17,6 +19,9 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [showInviteModal, setShowInviteModal] = useState(false)
+  const [showConnectRepoModal, setShowConnectRepoModal] = useState(false)
+  const [showAddFolderModal, setShowAddFolderModal] = useState(false)
+  const [selectedRepository, setSelectedRepository] = useState<any>(null)
   const [refreshTrigger, setRefreshTrigger] = useState(0)
 
   useEffect(() => {
@@ -34,7 +39,17 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
         .select(`
           *,
           owner:users!projects_owner_id_fkey(id, name, email, avatar_url),
-          repositories(id, name, full_name, url),
+          repositories(
+            id, 
+            name, 
+            full_name, 
+            url,
+            local_mappings:repository_local_mappings(
+              id,
+              local_path,
+              user:users(id, name, email)
+            )
+          ),
           members:project_members(
             id,
             role,
@@ -66,6 +81,21 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
     // Add small delay to ensure database has committed the changes
     await new Promise(resolve => setTimeout(resolve, 500))
     setRefreshTrigger(prev => prev + 1)
+  }
+
+  const handleRepositoryConnected = async () => {
+    // Refresh project data to show new repository
+    await fetchProject()
+  }
+
+  const handleAddLocalFolder = (repository: any) => {
+    setSelectedRepository(repository)
+    setShowAddFolderModal(true)
+  }
+
+  const handleLocalFolderAdded = async () => {
+    // Refresh project data to show new local mappings
+    await fetchProject()
   }
 
   if (loading) {
@@ -196,7 +226,10 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
                   <div className="flex items-center justify-between">
                     <h2 className="text-lg font-medium text-gray-900">Repositories</h2>
                     {isOwner && (
-                      <button className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-md text-sm font-medium">
+                      <button 
+                        onClick={() => setShowConnectRepoModal(true)}
+                        className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-md text-sm font-medium"
+                      >
                         Connect Repository
                       </button>
                     )}
@@ -204,21 +237,50 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
                 </div>
                 <div className="p-6">
                   {project.repositories?.length > 0 ? (
-                    <div className="space-y-3">
+                    <div className="space-y-4">
                       {project.repositories.map((repo: any) => (
-                        <div key={repo.id} className="flex items-center justify-between p-3 border border-gray-200 rounded-md">
-                          <div>
-                            <h3 className="font-medium text-gray-900">{repo.name}</h3>
-                            <p className="text-sm text-gray-500">{repo.full_name}</p>
+                        <div key={repo.id} className="border border-gray-200 rounded-md">
+                          <div className="flex items-center justify-between p-3 border-b border-gray-100">
+                            <div className="flex-1">
+                              <h3 className="font-medium text-gray-900">{repo.name}</h3>
+                              <p className="text-sm text-gray-500">{repo.full_name}</p>
+                            </div>
+                            <div className="flex items-center space-x-2">
+                              <button
+                                onClick={() => handleAddLocalFolder(repo)}
+                                className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+                              >
+                                Add Local Folder
+                              </button>
+                              <a
+                                href={repo.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-blue-600 hover:text-blue-800 text-sm"
+                              >
+                                View on GitHub
+                              </a>
+                            </div>
                           </div>
-                          <a
-                            href={repo.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-blue-600 hover:text-blue-800 text-sm"
-                          >
-                            View on GitHub
-                          </a>
+                          
+                          {/* Local folder mappings */}
+                          {repo.local_mappings && repo.local_mappings.length > 0 && (
+                            <div className="p-3 bg-gray-50">
+                              <h4 className="text-sm font-medium text-gray-700 mb-2">Local Folders:</h4>
+                              <div className="space-y-1">
+                                {repo.local_mappings.map((mapping: any) => (
+                                  <div key={mapping.id} className="flex items-center justify-between text-sm">
+                                    <span className="text-gray-600 font-mono truncate flex-1" title={mapping.local_path}>
+                                      {mapping.local_path}
+                                    </span>
+                                    <span className="text-gray-500 ml-2">
+                                      ({mapping.user.name || mapping.user.email})
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -283,6 +345,27 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
         projectId={projectId}
         onInviteSuccess={handleInviteSuccess}
       />
+
+      <ConnectRepositoryModal
+        isOpen={showConnectRepoModal}
+        onClose={() => setShowConnectRepoModal(false)}
+        projectId={projectId}
+        onSuccess={handleRepositoryConnected}
+      />
+
+      {selectedRepository && (
+        <AddLocalFolderModal
+          isOpen={showAddFolderModal}
+          onClose={() => {
+            setShowAddFolderModal(false)
+            setSelectedRepository(null)
+          }}
+          repositoryId={selectedRepository.id}
+          projectId={projectId}
+          repositoryName={selectedRepository.name}
+          onSuccess={handleLocalFolderAdded}
+        />
+      )}
     </div>
   )
 }

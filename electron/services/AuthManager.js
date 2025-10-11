@@ -9,6 +9,9 @@ class AuthManager {
     this.authPromise = null;
     this.serviceName = 'DevPulse';
     this.accountName = 'auth-token';
+    this.cachedUser = null; // Cache user data to avoid repeated API calls
+    this.userCacheExpiry = null; // Cache expiry time
+    this.cacheValidityMs = 5 * 60 * 1000; // Cache for 5 minutes
   }
 
   /**
@@ -164,6 +167,11 @@ class AuthManager {
       console.log('📦 User info keys:', Object.keys(userInfo || {}));
       console.log('📦 Full user info:', JSON.stringify(userInfo, null, 2));
 
+      // Cache the user data
+      this.cachedUser = userInfo;
+      this.userCacheExpiry = Date.now() + this.cacheValidityMs;
+      console.log('💾 User data cached for 5 minutes');
+
       console.log('✅ Authentication successful for:', userInfo?.email || 'unknown user');
 
       // Resolve the auth promise
@@ -298,6 +306,7 @@ class AuthManager {
    */
   async clearStoredToken() {
     try {
+      this.clearUserCache();
       await keytar.deletePassword(this.serviceName, this.accountName);
       console.log('🗑️ Token cleared from secure storage');
     } catch (error) {
@@ -365,22 +374,50 @@ class AuthManager {
    */
   async getCurrentUser() {
     const stored = await this.getStoredToken();
-    if (!stored) return null;
+    if (!stored) {
+      this.clearUserCache();
+      return null;
+    }
+
+    // Check if we have valid cached user data
+    if (this.cachedUser && this.userCacheExpiry && Date.now() < this.userCacheExpiry) {
+      console.log('📋 Returning cached user data');
+      return this.cachedUser;
+    }
 
     try {
-      return await this.getUserInfo(stored.token);
+      console.log('🔄 Cache expired or missing, fetching fresh user data');
+      const userInfo = await this.getUserInfo(stored.token);
+      
+      // Cache the fresh user data
+      this.cachedUser = userInfo;
+      this.userCacheExpiry = Date.now() + this.cacheValidityMs;
+      console.log('💾 Fresh user data cached');
+      
+      return userInfo;
     } catch (error) {
       console.error('Error getting current user:', error);
       // If we can't get user info, token might be invalid
+      this.clearUserCache();
       await this.clearStoredToken();
       return null;
     }
   }
 
   /**
+   * Clear cached user data
+   */
+  clearUserCache() {
+    this.cachedUser = null;
+    this.userCacheExpiry = null;
+    console.log('🗑️ User cache cleared');
+  }
+
+  /**
    * Sign out user
    */
   async signOut() {
+    this.clearUserCache();
     await this.clearStoredToken();
     console.log('👋 User signed out');
   }
@@ -410,6 +447,7 @@ class AuthManager {
 
     if (response.status === 401) {
       // Token might be invalid, clear it
+      this.clearUserCache();
       await this.clearStoredToken();
       throw new Error('Authentication expired');
     }

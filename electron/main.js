@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Notification, ipcMain, shell } = require('electron');
+const { app, BrowserWindow, Notification, ipcMain, shell, dialog } = require('electron');
 const path = require('path');
 const AuthManager = require('./services/AuthManager');
 const isDev = process.env.NODE_ENV === 'development';
@@ -10,6 +10,54 @@ const fetch = globalThis.fetch;
 const authManager = new AuthManager();
 
 let mainWindow;
+
+// Register IPC handlers early
+console.log('🔧 Registering IPC handlers...');
+
+// File system operations
+ipcMain.handle('fs:select-folder', async () => {
+  try {
+    console.log('📁 Folder selection requested');
+    
+    if (!mainWindow) {
+      console.error('❌ No main window available for dialog');
+      return { success: false, error: 'No main window available' };
+    }
+
+    const result = await dialog.showOpenDialog(mainWindow, {
+      properties: ['openDirectory'],
+      title: 'Select Repository Folder',
+      buttonLabel: 'Select Folder'
+    });
+
+    console.log('📁 Dialog result:', result);
+
+    if (result.canceled) {
+      return { success: false, canceled: true };
+    }
+
+    return { 
+      success: true, 
+      folderPath: result.filePaths[0],
+      canceled: false 
+    };
+  } catch (error) {
+    console.error('❌ Error selecting folder:', error);
+    return { 
+      success: false, 
+      error: error.message,
+      canceled: false 
+    };
+  }
+});
+
+// Test IPC handler for debugging
+ipcMain.handle('test:folder-selection', async () => {
+  console.log('🧪 Test folder selection handler called');
+  return { success: true, message: 'Handler is working' };
+});
+
+console.log('✅ Early IPC handlers registered');
 
 // No protocol registration needed - using external browser with local callback server
 
@@ -224,6 +272,8 @@ ipcMain.handle('api:call', async (event, endpoint, options = {}) => {
     throw error;
   }
 });
+
+console.log('✅ All IPC handlers registered');
 
 // No protocol testing needed with external browser auth
 
