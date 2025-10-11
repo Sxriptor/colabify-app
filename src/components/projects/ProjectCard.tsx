@@ -31,6 +31,11 @@ export function ProjectCard({ project, currentUserId }: ProjectCardProps) {
   const memberCount = project.members?.filter(m => m.status === 'active').length || 0
   const repoCount = project.repositories?.length || 0
 
+  // Handle cases where owner data might not be available due to RLS
+  const ownerName = project.owner?.name || project.owner?.email || 'Unknown'
+  const ownerInitial = ownerName.charAt(0).toUpperCase()
+  const ownerAvatarUrl = project.owner?.avatar_url
+
   return (
     <Link href={`/projects/${project.id}`}>
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow cursor-pointer">
@@ -79,16 +84,16 @@ export function ProjectCard({ project, currentUserId }: ProjectCardProps) {
             )}
 
             <div className="flex items-center">
-              {project.owner.avatar_url ? (
+              {ownerAvatarUrl ? (
                 <img
-                  src={project.owner.avatar_url}
-                  alt={project.owner.name}
+                  src={ownerAvatarUrl}
+                  alt={ownerName}
                   className="w-8 h-8 rounded-full"
                 />
               ) : (
                 <div className="w-8 h-8 rounded-full bg-gray-300 flex items-center justify-center">
                   <span className="text-xs font-medium text-gray-700">
-                    {project.owner.name?.charAt(0) || project.owner.email.charAt(0)}
+                    {ownerInitial}
                   </span>
                 </div>
               )}

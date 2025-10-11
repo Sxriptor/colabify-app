@@ -209,7 +209,14 @@ export function InboxContent() {
             </div>
           ) : (
             <div className="space-y-4">
-              {invitations.map((invitation) => (
+              {invitations.map((invitation) => {
+                // Skip invitations with missing data
+                if (!invitation.project || !invitation.inviter) {
+                  console.error('Invitation missing project or inviter data:', invitation)
+                  return null
+                }
+                
+                return (
                 <div key={invitation.id} className="bg-white shadow rounded-lg border border-gray-200">
                   <div className="p-6">
                     <div className="flex items-start justify-between">
@@ -288,7 +295,7 @@ export function InboxContent() {
                     </div>
                   </div>
                 </div>
-              ))}
+              )})}
             </div>
           )}
         </div>
