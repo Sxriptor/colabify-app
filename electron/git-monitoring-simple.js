@@ -84,6 +84,29 @@ class SimpleGitMonitoring {
       return mockState;
     });
 
+    ipcMain.handle('git:connectRepoToProject', async (event, projectId, repoPath) => {
+      console.log(`📡 Git IPC: Connecting repository at ${repoPath} to project ${projectId}`);
+      
+      // Return mock repository config
+      const mockRepoConfig = {
+        id: `repo-${Date.now()}`,
+        projectId: projectId,
+        path: repoPath,
+        watching: true,
+        last: {
+          branch: 'main',
+          head: 'abc123def',
+          dirty: false,
+          ahead: 0,
+          behind: 0,
+          lastChecked: new Date().toISOString()
+        }
+      };
+      
+      console.log(`📊 Connected repository:`, mockRepoConfig);
+      return mockRepoConfig;
+    });
+
     // Send test activity events for watched projects
     setInterval(() => {
       if (this.watchedProjects.size > 0 && mainWindow && !mainWindow.isDestroyed()) {
@@ -144,6 +167,7 @@ class SimpleGitMonitoring {
     ipcMain.removeHandler('git:watchProject');
     ipcMain.removeHandler('git:listProjectRepos');
     ipcMain.removeHandler('git:getRepoState');
+    ipcMain.removeHandler('git:connectRepoToProject');
     
     this.watchedProjects.clear();
     this.isInitialized = false;

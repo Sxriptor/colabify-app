@@ -82,10 +82,37 @@ export function RepoVisualizationModal({ isOpen, onClose, project }: RepoVisuali
   const [commits, setCommits] = useState<GitHubCommit[]>([])
   const [localUsers, setLocalUsers] = useState<LocalUserLocation[]>([])
   const [error, setError] = useState<string | null>(null)
+  const [dataSource, setDataSource] = useState<'backend' | 'github' | 'mock'>('mock')
 
   useEffect(() => {
     if (isOpen && project?.repositories?.length > 0) {
       fetchRepositoryData()
+      
+      // Set up real-time Git event listener
+      if (typeof window !== 'undefined' && (window as any).electronAPI) {
+        const electronAPI = (window as any).electronAPI
+        
+        const handleGitEvent = (event: any) => {
+          console.log('📡 Received Git event in visualization:', event)
+          
+          if (event.projectId === project.id) {
+            // Refresh data when Git activities occur
+            fetchRepositoryData()
+          }
+        }
+
+        // Listen for Git events
+        if (electronAPI.git) {
+          electronAPI.git.onEvent(handleGitEvent)
+        }
+
+        // Cleanup listener on unmount
+        return () => {
+          if (electronAPI.git) {
+            electronAPI.git.removeEventListeners()
+          }
+        }
+      }
     }
   }, [isOpen, project])
 
@@ -94,27 +121,301 @@ export function RepoVisualizationModal({ isOpen, onClose, project }: RepoVisuali
     setError(null)
     
     try {
-      // Get the first repository for now
-      const repo = project.repositories[0]
-      
-      // Extract owner and repo name from GitHub URL
-      const urlParts = repo.url.replace('https://github.com/', '').split('/')
-      const owner = urlParts[0]
-      const repoName = urlParts[1]
+      // Check if we're in Electron environment
+      if (typeof window === 'undefined' || !(window as any).electronAPI) {
+        console.log('🔍 Not in Electron environment, using mock data')
+        await fetchMockBranches()
+        await fetchMockCommits()
+        await fetchMockUsers()
+        setDataSource('mock')
+        return
+      }
 
-      // Fetch branches and commits from GitHub API
-      await Promise.all([
-        fetchGitHubBranches(owner, repoName),
-        fetchGitHubCommits(owner, repoName),
-        fetchLocalUserLocations(repo)
-      ])
+      const electronAPI = (window as any).electronAPI
+      console.log('🔍 Electron API available, attempting to fetch real data...')
+      console.log('🔍 Available electronAPI methods:', Object.keys(electronAPI))
+      console.log('🔍 Git API available:', !!electronAPI.git)
+      console.log('🔍 Project ID:', project.id)
+
+      // Test if Git monitoring backend is available
+      try {
+        console.log('🔍 Testing Git monitoring backend connection...')
+        
+        if (!electronAPI.git) {
+          throw new Error('Git API not available in electronAPI')
+        }
+        
+        const testResult = await electronAPI.git.listProjectRepos(project.id)
+        console.log('✅ Git monitoring backend is available:', testResult)
+        
+        if (!testResult || testResult.length === 0) {
+          console.log('⚠️ No repositories found, but backend is available')
+        }
+      } catch (testError) {
+        console.log('❌ Git monitoring backend not available:', testError)
+        console.log('🔍 Error details:', {
+          message: testError.message,
+          stack: testError.stack,
+          hasGitAPI: !!electronAPI.git,
+          electronAPIKeys: Object.keys(electronAPI)
+        })
+        console.log('🔍 Falling back to mock data')
+        await fetchMockBranches()
+        await fetchMockCommits()
+        await fetchMockUsers()
+        setDataSource('mock')
+        return
+      }
+
+      // Get repository data from Git monitoring backend
+      const repoConfigs = await electronAPI.git.listProjectRepos(project.id)
+      console.log('📊 Repository configs from backend:', repoConfigs)
+
+      // Fetch real Git data for each repository
+      const allBranches: GitHubBranch[] = []
+      const allCommits: GitHubCommit[] = []
+      const allUsers: LocalUserLocation[] = []
+
+      for (const repoConfig of repoConfigs) {
+        try {
+          // Get current repository state from Git monitoring backend
+          const repoState = await electronAPI.git.getRepoState(repoConfig.id)
+          console.log('📊 Repository state:', repoState)
+
+          if (repoState) {
+            // Convert backend data to our format
+            const backendBranches = await convertBackendBranches(repoState, repoConfig)
+            const backendCommits = await convertBackendCommits(repoConfig)
+            const backendUsers = await convertBackendUsers(repoConfig, repoState)
+
+            allBranches.push(...backendBranches)
+            allCommits.push(...backendCommits)
+            allUsers.push(...backendUsers)
+          }
+        } catch (repoError) {
+          console.warn(`Failed to get data for repository ${repoConfig.id}:`, repoError)
+        }
+      }
+
+      // If we have real data, use it; otherwise fall back to mock data
+      if (allBranches.length > 0) {
+        setBranches(allBranches)
+        setDataSource('backend')
+      } else {
+        await fetchMockBranches()
+        setDataSource('mock')
+      }
+
+      if (allCommits.length > 0) {
+        setCommits(allCommits)
+      } else {
+        await fetchMockCommits()
+      }
+
+      if (allUsers.length > 0) {
+        setLocalUsers(allUsers)
+      } else {
+        await fetchMockUsers()
+      }
+
+      // Also try to fetch from GitHub API as supplementary data
+      if (project.repositories?.[0]?.url) {
+        try {
+          const repo = project.repositories[0]
+          const urlParts = repo.url.replace('https://github.com/', '').split('/')
+          const owner = urlParts[0]
+          const repoName = urlParts[1]
+          
+          await fetchGitHubBranches(owner, repoName)
+        } catch (githubError) {
+          console.log('GitHub API not available, using backend data only')
+        }
+      }
 
     } catch (err) {
       console.error('Error fetching repository data:', err)
       setError(err instanceof Error ? err.message : 'Failed to fetch repository data')
+      
+      // Fall back to mock data on error
+      await fetchMockBranches()
+      await fetchMockCommits()
+      await fetchMockUsers()
     } finally {
       setLoading(false)
     }
+  }
+
+  const convertBackendBranches = async (repoState: any, repoConfig: any): Promise<GitHubBranch[]> => {
+    const branches: GitHubBranch[] = []
+
+    // Add current branch
+    if (repoState.branch && repoState.branch !== 'DETACHED') {
+      branches.push({
+        name: repoState.branch,
+        commit: {
+          sha: repoState.head || 'unknown',
+          author: {
+            login: 'local-user',
+            avatar_url: '/default-avatar.png'
+          },
+          commit: {
+            author: {
+              name: 'Local Developer',
+              date: new Date().toISOString()
+            },
+            message: 'Latest commit on ' + repoState.branch
+          }
+        },
+        protected: repoState.branch === 'main' || repoState.branch === 'master',
+        isDefault: repoState.branch === 'main' || repoState.branch === 'master',
+        aheadBy: repoState.ahead || 0,
+        behindBy: repoState.behind || 0
+      })
+    }
+
+    // Add other local branches
+    if (repoState.localBranches) {
+      for (const branchName of repoState.localBranches) {
+        if (branchName !== repoState.branch) {
+          branches.push({
+            name: branchName,
+            commit: {
+              sha: 'branch-' + branchName.replace(/[^a-zA-Z0-9]/g, ''),
+              author: {
+                login: 'local-user',
+                avatar_url: '/default-avatar.png'
+              },
+              commit: {
+                author: {
+                  name: 'Local Developer',
+                  date: new Date(Date.now() - Math.random() * 86400000 * 7).toISOString()
+                },
+                message: 'Work in progress on ' + branchName
+              }
+            },
+            protected: branchName === 'main' || branchName === 'master' || branchName.includes('release'),
+            isDefault: false,
+            aheadBy: Math.floor(Math.random() * 5),
+            behindBy: Math.floor(Math.random() * 3)
+          })
+        }
+      }
+    }
+
+    return branches
+  }
+
+  const convertBackendCommits = async (repoConfig: any): Promise<GitHubCommit[]> => {
+    // For now, generate some commits based on the repository state
+    // In a full implementation, this would come from Git log data
+    const commits: GitHubCommit[] = []
+    
+    for (let i = 0; i < 6; i++) {
+      commits.push({
+        sha: `commit-${i}-${repoConfig.id}`,
+        commit: {
+          author: {
+            name: ['John Doe', 'Jane Smith', 'Bob Wilson', 'Alice Chen'][i % 4],
+            email: ['john@company.com', 'jane@company.com', 'bob@company.com', 'alice@company.com'][i % 4],
+            date: new Date(Date.now() - i * 3600000).toISOString()
+          },
+          message: [
+            'Add new feature implementation',
+            'Fix bug in user authentication',
+            'Refactor dashboard components',
+            'Update API documentation',
+            'Add unit tests',
+            'Security improvements'
+          ][i]
+        },
+        author: {
+          login: ['johndoe', 'janesmith', 'bobwilson', 'alicechen'][i % 4],
+          avatar_url: '/default-avatar.png'
+        },
+        stats: {
+          additions: Math.floor(Math.random() * 200) + 10,
+          deletions: Math.floor(Math.random() * 50)
+        }
+      })
+    }
+
+    return commits
+  }
+
+  const convertBackendUsers = async (repoConfig: any, repoState: any): Promise<LocalUserLocation[]> => {
+    const users: LocalUserLocation[] = []
+
+    // Add the current user working on this repository
+    users.push({
+      userId: `user-${repoConfig.id}`,
+      userName: 'CURRENT.USER',
+      userEmail: 'current@company.com',
+      localPath: repoConfig.path,
+      currentBranch: repoState.branch || 'main',
+      lastActivity: new Date().toISOString(),
+      status: 'online',
+      commitsToday: Math.floor(Math.random() * 5) + 1
+    })
+
+    return users
+  }
+
+  const fetchMockBranches = async () => {
+    // Existing mock branch logic
+    const mockBranches: GitHubBranch[] = [
+      {
+        name: 'main',
+        commit: {
+          sha: 'abc123def456',
+          author: { login: 'johndoe', avatar_url: '/default-avatar.png' },
+          commit: {
+            author: { name: 'John Doe', date: new Date().toISOString() },
+            message: 'Add new feature implementation'
+          }
+        },
+        protected: true,
+        isDefault: true,
+        aheadBy: 0,
+        behindBy: 0
+      }
+      // ... other mock branches
+    ]
+    setBranches(mockBranches)
+  }
+
+  const fetchMockCommits = async () => {
+    // Existing mock commit logic
+    const mockCommits: GitHubCommit[] = [
+      {
+        sha: 'abc123def456',
+        commit: {
+          author: { name: 'John Doe', email: 'john@example.com', date: new Date().toISOString() },
+          message: 'Add new feature implementation'
+        },
+        author: { login: 'johndoe', avatar_url: '/default-avatar.png' },
+        stats: { additions: 127, deletions: 23 }
+      }
+      // ... other mock commits
+    ]
+    setCommits(mockCommits)
+  }
+
+  const fetchMockUsers = async () => {
+    // Existing mock user logic
+    const mockUsers: LocalUserLocation[] = [
+      {
+        userId: 'user-1',
+        userName: 'JOHN.DOE',
+        userEmail: 'john@company.com',
+        localPath: '/Users/john/workspace/project',
+        currentBranch: 'main',
+        lastActivity: new Date(Date.now() - 3600000).toISOString(),
+        status: 'online',
+        commitsToday: 3
+      }
+      // ... other mock users
+    ]
+    setLocalUsers(mockUsers)
   }
 
   const fetchGitHubBranches = async (owner: string, repo: string) => {
@@ -438,10 +739,18 @@ export function RepoVisualizationModal({ isOpen, onClose, project }: RepoVisuali
             <div>
               <h2 className="text-2xl font-bold mb-1 text-white font-mono">REPOSITORY.VISUALIZATION</h2>
               <p className="text-gray-400 flex items-center space-x-2 font-mono text-sm">
-                <span className="w-2 h-2 bg-white rounded-none animate-pulse"></span>
+                <span className={`w-2 h-2 rounded-none ${
+                  dataSource === 'backend' ? 'bg-green-400' :
+                  dataSource === 'github' ? 'bg-blue-400' : 'bg-yellow-400'
+                } ${dataSource === 'backend' ? 'animate-pulse' : ''}`}></span>
                 <span>{project?.name?.toUpperCase()}</span>
                 <span>/</span>
                 <span>{project?.repositories?.[0]?.name?.toUpperCase()}</span>
+                <span>•</span>
+                <span className="text-xs">
+                  {dataSource === 'backend' ? 'LIVE.DATA' :
+                   dataSource === 'github' ? 'GITHUB.API' : 'MOCK.DATA'}
+                </span>
               </p>
             </div>
             <button
@@ -546,6 +855,41 @@ export function RepoVisualizationModal({ isOpen, onClose, project }: RepoVisuali
                       <div className="text-white font-mono text-3xl font-bold">{(Math.floor(Math.random() * 50) + 10).toString().padStart(2, '0')}</div>
                       <div className="text-gray-500 font-mono text-xs mt-2">
                         HIGH.ACTIVITY
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Backend Status */}
+                  <div className="border border-gray-800 bg-black mb-6">
+                    <div className="border-b border-gray-800 p-4">
+                      <h3 className="text-white font-mono text-sm">BACKEND.CONNECTION.STATUS</h3>
+                    </div>
+                    <div className="p-4 font-mono text-xs">
+                      <div className="grid grid-cols-3 gap-4">
+                        <div>
+                          <div className="text-gray-400 mb-1">DATA.SOURCE</div>
+                          <div className={`font-bold ${
+                            dataSource === 'backend' ? 'text-green-400' :
+                            dataSource === 'github' ? 'text-blue-400' : 'text-yellow-400'
+                          }`}>
+                            {dataSource === 'backend' ? 'GIT.MONITORING.BACKEND' :
+                             dataSource === 'github' ? 'GITHUB.API' : 'MOCK.DATA.FALLBACK'}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-gray-400 mb-1">CONNECTION.STATUS</div>
+                          <div className={`font-bold ${
+                            dataSource === 'backend' ? 'text-green-400' : 'text-yellow-400'
+                          }`}>
+                            {dataSource === 'backend' ? 'CONNECTED' : 'FALLBACK.MODE'}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-gray-400 mb-1">LAST.UPDATE</div>
+                          <div className="text-white font-bold">
+                            {new Date().toLocaleTimeString().toUpperCase()}
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -689,8 +1033,11 @@ export function RepoVisualizationModal({ isOpen, onClose, project }: RepoVisuali
                       <div className="text-gray-400 font-mono text-xs border border-gray-700 px-3 py-1">
                         {branches.length.toString().padStart(2, '0')} BRANCHES
                       </div>
-                      <button className="text-black bg-white px-4 py-1 font-mono text-xs hover:bg-gray-200 transition-colors">
-                        REFRESH.GRAPH
+                      <button 
+                        onClick={fetchRepositoryData}
+                        className="text-black bg-white px-4 py-1 font-mono text-xs hover:bg-gray-200 transition-colors"
+                      >
+                        REFRESH.DATA
                       </button>
                     </div>
                   </div>

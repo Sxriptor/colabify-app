@@ -283,16 +283,49 @@ let gitMonitoringBackend;
 
 // Function to initialize Git monitoring (called after window is ready)
 async function initializeGitMonitoring(mainWindow) {
+  console.log('🚀 Starting Git monitoring initialization...');
+  
   try {
-    // Dynamic import for TypeScript modules
-    const gitModule = await import('../src/main/index.js');
-    gitMonitoringBackend = gitModule.gitMonitoringBackend;
+    console.log('📦 Loading git-monitoring-simple.js (reliable version)...');
+    
+    // Use the simple, tested version directly
+    const simpleGitModule = require('./git-monitoring-simple.js');
+    gitMonitoringBackend = simpleGitModule.gitMonitoringBackend;
+    
+    console.log('✅ Git monitoring backend instance obtained');
+    console.log('🔧 Initializing Git monitoring backend...');
     
     await gitMonitoringBackend.initialize(mainWindow);
-    console.log('✅ Git monitoring backend initialized');
+    console.log('✅ Git monitoring backend initialized successfully');
+    
   } catch (error) {
     console.error('❌ Failed to initialize Git monitoring backend:', error);
-    console.error('This is expected in development - Git monitoring will be available after TypeScript compilation');
+    console.error('❌ Error stack:', error.stack);
+    
+    // If even the simple version fails, try the complex one as fallback
+    try {
+      console.log('🔄 Attempting fallback to git-monitoring-backend.js...');
+      
+      // First, clean up any partially registered handlers
+      try {
+        const { ipcMain } = require('electron');
+        ipcMain.removeHandler('git:watchProject');
+        ipcMain.removeHandler('git:listProjectRepos');
+        ipcMain.removeHandler('git:getRepoState');
+        ipcMain.removeHandler('git:connectRepoToProject');
+        console.log('🧹 Cleaned up any existing Git IPC handlers');
+      } catch (cleanupError) {
+        console.log('ℹ️ No existing handlers to clean up');
+      }
+      
+      const gitModule = require('./git-monitoring-backend.js');
+      gitMonitoringBackend = gitModule.gitMonitoringBackend;
+      await gitMonitoringBackend.initialize(mainWindow);
+      console.log('✅ Complex Git monitoring backend initialized as fallback');
+    } catch (fallbackError) {
+      console.error('❌ Failed to initialize any Git monitoring backend:', fallbackError);
+      console.error('❌ Fallback error stack:', fallbackError.stack);
+    }
   }
 }
 

@@ -78,4 +78,41 @@ contextBridge.exposeInMainWorld('electronAPI', {
       callback(data);
     });
   },
+
+  // Git Monitoring Backend API
+  git: {
+    watchProject: (projectId, on) => {
+      console.log(`🔧 PRELOAD: Git watchProject called for ${projectId}, on: ${on}`);
+      return ipcRenderer.invoke('git:watchProject', projectId, on);
+    },
+    listProjectRepos: (projectId) => {
+      console.log(`🔧 PRELOAD: Git listProjectRepos called for ${projectId}`);
+      return ipcRenderer.invoke('git:listProjectRepos', projectId);
+    },
+    getRepoState: (repoId) => {
+      console.log(`🔧 PRELOAD: Git getRepoState called for ${repoId}`);
+      return ipcRenderer.invoke('git:getRepoState', repoId);
+    },
+    connectRepoToProject: (projectId, path) => {
+      console.log(`🔧 PRELOAD: Git connectRepoToProject called for ${projectId} at ${path}`);
+      return ipcRenderer.invoke('git:connectRepoToProject', projectId, path);
+    },
+    onEvent: (callback) => {
+      console.log('🎧 PRELOAD: Setting up git:event listener');
+      ipcRenderer.on('git:event', (event, data) => {
+        console.log('📡 PRELOAD: git:event received!', data);
+        callback(data);
+      });
+    },
+    removeEventListeners: () => {
+      console.log('🧹 PRELOAD: Removing git:event listeners');
+      ipcRenderer.removeAllListeners('git:event');
+    }
+  },
+
+  // Legacy invoke method for backward compatibility
+  invoke: (channel, ...args) => {
+    console.log(`🔧 PRELOAD: Legacy invoke called for ${channel}`, args);
+    return ipcRenderer.invoke(channel, ...args);
+  }
 });
