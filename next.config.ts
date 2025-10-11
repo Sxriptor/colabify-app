@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  output: 'export',
+  // Don't use 'export' output - we need API routes for Electron auth
   images: {
     unoptimized: true,
   },

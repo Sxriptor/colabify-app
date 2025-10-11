@@ -22,23 +22,15 @@ export function CreateProjectForm({ onSuccess, onCancel }: CreateProjectFormProp
     setError(null)
 
     try {
-      const response = await fetch('/api/projects', {
+      const electronAPI = (window as any).electronAPI
+      const data = await electronAPI.apiCall('/projects', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify({
           name,
           description,
           visibility,
         }),
       })
-
-      const data = await response.json()
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to create project')
-      }
 
       if (onSuccess) {
         onSuccess(data.project)

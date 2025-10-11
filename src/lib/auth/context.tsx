@@ -162,13 +162,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       electronAPI.onAuthSuccess(async (data: any) => {
         console.log('🔔 Auth success event received in context:', data)
         try {
-          const electronUser = await electronAPI.getUser()
-          console.log('👤 Got Electron user after auth success:', electronUser)
-          if (electronUser) {
-            const supabaseUser = convertElectronUserToSupabaseUser(electronUser)
-            setUser(supabaseUser)
-            await ensureCustomUserExists(supabaseUser)
-            console.log('✅ User state updated after auth success')
+          // Get the token from Electron and set it in Supabase
+          const isAuthenticated = await electronAPI.isAuthenticated()
+          if (isAuthenticated) {
+            const electronUser = await electronAPI.getUser()
+            console.log('👤 Got Electron user after auth success:', electronUser)
+            if (electronUser) {
+              const supabaseUser = convertElectronUserToSupabaseUser(electronUser)
+              setUser(supabaseUser)
+              await ensureCustomUserExists(supabaseUser)
+              console.log('✅ User state updated after auth success')
+            }
           }
         } catch (err) {
           console.error('❌ Error handling auth success in context:', err)
@@ -179,6 +183,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         console.log('🔔 Auth signed out event received in context')
         setUser(null)
         setCustomUser(null)
+        // Reload to clear all state
+        window.location.href = '/'
       })
 
       return () => {
@@ -220,11 +226,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (isElectron) {
       const electronAPI = (window as any).electronAPI
       await electronAPI.logout()
+      // Reload the page to clear all state
+      window.location.href = '/'
     } else {
       await supabase.auth.signOut()
+      setUser(null)
+      setCustomUser(null)
     }
-    setUser(null)
-    setCustomUser(null)
   }
 
   return (

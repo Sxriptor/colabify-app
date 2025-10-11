@@ -18,13 +18,8 @@ export function DashboardContent() {
 
   const fetchProjects = async () => {
     try {
-      const response = await fetch('/api/projects')
-      const data = await response.json()
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to fetch projects')
-      }
-
+      const electronAPI = (window as any).electronAPI
+      const data = await electronAPI.apiCall('/projects')
       setProjects(data.projects)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred')

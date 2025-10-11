@@ -1,10 +1,9 @@
-import { createClient } from '@/lib/supabase/server'
+import { getAuthenticatedClient } from '@/lib/supabase/api-auth'
 import { NextResponse } from 'next/server'
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const supabase = await createClient()
-    
+    const supabase = getAuthenticatedClient(request)
     const { data: { user }, error: authError } = await supabase.auth.getUser()
     
     if (authError || !user) {
@@ -49,8 +48,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const supabase = await createClient()
-    
+    const supabase = getAuthenticatedClient(request)
     const { data: { user }, error: authError } = await supabase.auth.getUser()
     
     if (authError || !user) {
