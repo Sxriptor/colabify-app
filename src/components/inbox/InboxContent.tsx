@@ -38,14 +38,28 @@ export function InboxContent() {
 
   const fetchInvitations = async () => {
     try {
-      const response = await fetch('/api/invitations')
-      const data = await response.json()
+      const { createElectronClient } = await import('@/lib/supabase/electron-client')
+      const supabase = await createElectronClient()
 
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to fetch invitations')
-      }
+      const { data, error } = await supabase
+        .from('project_invitations')
+        .select(`
+          id,
+          project_id,
+          email,
+          invited_by,
+          status,
+          expires_at,
+          created_at,
+          project:projects(id, name, description, visibility),
+          inviter:users!project_invitations_invited_by_fkey(name, email)
+        `)
+        .eq('email', user?.email)
+        .eq('status', 'pending')
+        .order('created_at', { ascending: false })
 
-      setInvitations(data.invitations)
+      if (error) throw error
+      setInvitations(data || [])
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred')
     } finally {
@@ -57,32 +71,47 @@ export function InboxContent() {
     setProcessingInvites(prev => new Set(prev).add(invitationId))
 
     try {
-      const response = await fetch(`/api/invitations/${invitationId}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ action }),
-      })
+      const { createElectronClient } = await import('@/lib/supabase/electron-client')
+      const supabase = await createElectronClient()
 
-      const data = await response.json()
+      const invitation = invitations.find(inv => inv.id === invitationId)
+      if (!invitation) throw new Error('Invitation not found')
 
-      if (!response.ok) {
-        throw new Error(data.error || `Failed to ${action} invitation`)
+      if (action === 'accept') {
+        // Get current user
+        const { data: { user: authUser } } = await supabase.auth.getUser()
+        if (!authUser) throw new Error('Not authenticated')
+
+        // Add user as project member
+        const { error: memberError } = await supabase
+          .from('project_members')
+          .insert({
+            project_id: invitation.project_id,
+            user_id: authUser.id,
+            role: 'member',
+            status: 'active',
+            joined_at: new Date().toISOString(),
+          })
+
+        if (memberError) throw memberError
       }
+
+      // Update invitation status
+      const { error: updateError } = await supabase
+        .from('project_invitations')
+        .update({ status: action === 'accept' ? 'accepted' : 'declined' })
+        .eq('id', invitationId)
+
+      if (updateError) throw updateError
 
       // Remove the invitation from the list
       setInvitations(prev => prev.filter(inv => inv.id !== invitationId))
 
-      // If accepted, optionally redirect to the project
+      // If accepted, redirect to the project
       if (action === 'accept') {
-        const invitation = invitations.find(inv => inv.id === invitationId)
-        if (invitation) {
-          // Show success message and optionally redirect
-          setTimeout(() => {
-            router.push(`/projects/${invitation.project_id}`)
-          }, 1000)
-        }
+        setTimeout(() => {
+          router.push(`/projects/${invitation.project_id}`)
+        }, 1000)
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred')

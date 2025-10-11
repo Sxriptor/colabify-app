@@ -35,17 +35,24 @@ export function SettingsContent() {
 
   const fetchSettings = async () => {
     try {
-      const response = await fetch('/api/settings')
-      const data = await response.json()
+      const { createElectronClient } = await import('@/lib/supabase/electron-client')
+      const supabase = await createElectronClient()
 
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to fetch settings')
-      }
+      const { data: { user: authUser } } = await supabase.auth.getUser()
+      if (!authUser) throw new Error('Not authenticated')
 
-      setSettings(data.settings)
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', authUser.id)
+        .single()
+
+      if (error) throw error
+
+      setSettings(data)
       setFormData({
-        name: data.settings.name || '',
-        notification_preference: data.settings.notification_preference || 'instant'
+        name: data.name || '',
+        notification_preference: data.notification_preference || 'instant'
       })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred')
@@ -61,23 +68,28 @@ export function SettingsContent() {
     setSuccessMessage(null)
 
     try {
-      const response = await fetch('/api/settings', {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(formData),
-      })
+      const { createElectronClient } = await import('@/lib/supabase/electron-client')
+      const supabase = await createElectronClient()
 
-      const data = await response.json()
+      const { data: { user: authUser } } = await supabase.auth.getUser()
+      if (!authUser) throw new Error('Not authenticated')
 
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to update settings')
-      }
+      const { data, error } = await supabase
+        .from('users')
+        .update({
+          name: formData.name,
+          notification_preference: formData.notification_preference,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', authUser.id)
+        .select()
+        .single()
 
-      setSettings(data.settings)
+      if (error) throw error
+
+      setSettings(data)
       setSuccessMessage('Settings updated successfully!')
-      
+
       // Clear success message after 3 seconds
       setTimeout(() => setSuccessMessage(null), 3000)
     } catch (err) {
