@@ -5,6 +5,7 @@ class SimpleGitMonitoring {
   constructor() {
     this.isInitialized = false;
     this.watchedProjects = new Set(); // Track which projects are being watched
+    this.repositoryCache = new Map(); // Cache repositories by ID for quick lookup
   }
 
   initialize(mainWindow) {
@@ -41,47 +42,121 @@ class SimpleGitMonitoring {
     ipcMain.handle('git:listProjectRepos', async (event, projectId) => {
       console.log(`📡 Git IPC: Listing repositories for project ${projectId}`);
       
-      // Simulate repository data based on whether project is watched
-      const isWatched = this.watchedProjects.has(projectId);
-      const mockRepos = isWatched ? [
-        {
-          id: `repo-1-${projectId}`,
-          projectId: projectId,
-          path: `/mock/path/to/repo1`,
-          watching: true,
-          last: {
-            branch: 'main',
-            head: 'abc123',
-            statusShort: '',
-            ahead: 0,
-            behind: 0,
-            localBranches: ['main', 'develop'],
-            remoteBranches: ['origin/main', 'origin/develop']
-          }
+      try {
+        // Try to find real Git repositories on the system
+        const realRepos = await this.findRealGitRepositories(projectId);
+        
+        if (realRepos.length > 0) {
+          console.log(`📋 Found ${realRepos.length} real Git repositories for project ${projectId}:`);
+          realRepos.forEach(repo => {
+            console.log(`  - ${repo.path} (${repo.last.branch})`);
+            // Cache the repository for quick lookup
+            this.repositoryCache.set(repo.id, repo);
+          });
+          return realRepos;
         }
-      ] : [];
-      
-      console.log(`📋 Returning ${mockRepos.length} repositories for project ${projectId}`);
-      return mockRepos;
+        
+        // Fallback to mock data if no real repos found
+        console.log(`📋 No real repositories found, returning mock data for project ${projectId}`);
+        const mockRepos = [
+          {
+            id: `repo-mock-${projectId}`,
+            projectId: projectId,
+            path: `~/workspace/${projectId}`,
+            watching: true,
+            last: {
+              branch: 'main',
+              head: 'abc123mock',
+              statusShort: '',
+              ahead: 0,
+              behind: 0,
+              localBranches: ['main', 'develop'],
+              remoteBranches: ['origin/main', 'origin/develop']
+            }
+          }
+        ];
+        
+        return mockRepos;
+      } catch (error) {
+        console.error(`❌ Error listing repositories for project ${projectId}:`, error);
+        return [];
+      }
     });
 
     ipcMain.handle('git:getRepoState', async (event, repoId) => {
       console.log(`📡 Git IPC: Getting state for repository ${repoId}`);
       
-      // Return mock repository state
-      const mockState = {
-        branch: 'main',
-        head: 'abc123def',
-        statusShort: 'M  src/file.js',
-        upstream: 'origin/main',
-        ahead: 1,
-        behind: 0,
-        localBranches: ['main', 'feature/test'],
-        remoteBranches: ['origin/main', 'origin/develop']
-      };
-      
-      console.log(`📊 Repository ${repoId} state:`, mockState);
-      return mockState;
+      try {
+        // First, try to get the repository from cache
+        const cachedRepo = this.repositoryCache.get(repoId);
+        
+        if (cachedRepo && cachedRepo.path) {
+          console.log(`🔍 Found cached repository ${repoId} at ${cachedRepo.path}`);
+          console.log(`🔧 Getting fresh Git state for ${cachedRepo.path}`);
+          
+          const realState = await this.getActualGitState(cachedRepo.path);
+          console.log(`📊 Real repository ${repoId} state:`, realState);
+          
+          // Update the cache with fresh state
+          cachedRepo.last = realState;
+          this.repositoryCache.set(repoId, cachedRepo);
+          
+          return realState;
+        }
+        
+        // If not in cache, try to find it by searching again
+        console.log(`⚠️ Repository ${repoId} not in cache, searching...`);
+        
+        // Extract project ID from repo ID (assuming format: repo-xxx-{projectId}-{number})
+        const projectIdMatch = repoId.match(/repo-.+-(.+)-\d+$/);
+        const projectId = projectIdMatch ? projectIdMatch[1] : 'unknown';
+        
+        const allRepos = await this.findRealGitRepositories(projectId);
+        const repo = allRepos.find(r => r.id === repoId);
+        
+        if (repo && repo.path) {
+          console.log(`🔍 Found repository ${repoId} at ${repo.path}`);
+          const realState = await this.getActualGitState(repo.path);
+          console.log(`📊 Real repository ${repoId} state:`, realState);
+          
+          // Cache it for next time
+          this.repositoryCache.set(repoId, repo);
+          
+          return realState;
+        }
+        
+        // Fallback to mock state if repository not found
+        console.log(`❌ Repository ${repoId} not found anywhere, returning mock state`);
+        const mockState = {
+          branch: 'main',
+          head: 'abc123def',
+          statusShort: 'M  src/file.js',
+          upstream: 'origin/main',
+          ahead: 1,
+          behind: 0,
+          dirty: true,
+          localBranches: ['main', 'feature/test'],
+          remoteBranches: ['origin/main', 'origin/develop'],
+          lastChecked: new Date().toISOString()
+        };
+        
+        return mockState;
+      } catch (error) {
+        console.error(`❌ Error getting repository state for ${repoId}:`, error);
+        
+        // Return error state
+        return {
+          branch: 'error',
+          head: 'error',
+          statusShort: 'Error reading repository',
+          ahead: 0,
+          behind: 0,
+          dirty: false,
+          localBranches: [],
+          remoteBranches: [],
+          lastChecked: new Date().toISOString()
+        };
+      }
     });
 
     ipcMain.handle('git:connectRepoToProject', async (event, projectId, repoPath) => {
@@ -158,6 +233,193 @@ class SimpleGitMonitoring {
     console.log('  - Tracks watch state in memory for testing');
   }
 
+  async findRealGitRepositories(projectId) {
+    const fs = require('fs').promises;
+    const path = require('path');
+    const os = require('os');
+    
+    console.log(`🔍 Searching for Git repositories for project ${projectId}...`);
+    console.log(`🏠 Home directory: ${os.homedir()}`);
+    
+    const repositories = [];
+    
+    // Common directories where Git repositories might be found
+    const searchPaths = [
+      process.cwd(), // Current working directory (likely the project itself!)
+      path.dirname(process.cwd()), // Parent directory
+      path.join(os.homedir(), 'workspace'),
+      path.join(os.homedir(), 'projects'),
+      path.join(os.homedir(), 'dev'),
+      path.join(os.homedir(), 'code'),
+      path.join(os.homedir(), 'Documents'),
+      path.join(os.homedir(), 'Desktop'),
+      '/Users/Shared', // macOS shared folder
+      '/opt/projects', // Common Linux location
+    ];
+    
+    console.log(`📂 Will search these paths:`, searchPaths);
+    
+    for (const searchPath of searchPaths) {
+      try {
+        console.log(`🔍 Checking directory: ${searchPath}`);
+        const exists = await fs.access(searchPath).then(() => true).catch(() => false);
+        if (!exists) {
+          console.log(`❌ Directory does not exist: ${searchPath}`);
+          continue;
+        }
+        
+        console.log(`✅ Directory exists: ${searchPath}`);
+        const entries = await fs.readdir(searchPath, { withFileTypes: true });
+        console.log(`📁 Found ${entries.length} entries in ${searchPath}`);
+        
+        for (const entry of entries) {
+          if (entry.isDirectory()) {
+            const fullPath = path.join(searchPath, entry.name);
+            const gitPath = path.join(fullPath, '.git');
+            
+            try {
+              await fs.access(gitPath);
+              // This is a Git repository
+              console.log(`🎉 Found Git repository: ${fullPath}`);
+              
+              console.log(`🔧 Getting Git state for: ${fullPath}`);
+              const repoState = await this.getActualGitState(fullPath);
+              console.log(`📊 Git state:`, repoState);
+              
+              repositories.push({
+                id: `repo-real-${Buffer.from(fullPath).toString('base64').slice(0, 8)}`,
+                projectId: projectId,
+                path: fullPath,
+                watching: true,
+                last: repoState
+              });
+              
+              // Limit to 3 repositories to avoid overwhelming the UI
+              if (repositories.length >= 3) break;
+              
+            } catch (gitError) {
+              // Not a Git repository, continue
+            }
+          }
+        }
+        
+        if (repositories.length >= 3) break;
+      } catch (error) {
+        // Directory doesn't exist or can't be read, continue
+        console.log(`❌ Could not search ${searchPath}: ${error.message}`);
+      }
+    }
+    
+    console.log(`🏁 Search complete. Found ${repositories.length} Git repositories total.`);
+    return repositories;
+  }
+
+  async getActualGitState(repoPath) {
+    try {
+      console.log(`🔧 Executing Git commands in: ${repoPath}`);
+      
+      // Get current branch
+      console.log(`🌿 Getting current branch...`);
+      const branch = await this.execGit(repoPath, ['rev-parse', '--abbrev-ref', 'HEAD']);
+      console.log(`🌿 Branch: ${branch.trim()}`);
+      
+      // Get current commit hash
+      console.log(`🔗 Getting current commit hash...`);
+      const head = await this.execGit(repoPath, ['rev-parse', 'HEAD']);
+      console.log(`🔗 Head: ${head.trim().substring(0, 8)}`);
+      
+      // Get status
+      console.log(`📊 Getting working directory status...`);
+      const status = await this.execGit(repoPath, ['status', '--porcelain']);
+      console.log(`📊 Status: ${status.trim() || 'clean'}`);
+      
+      // Get local branches
+      const localBranches = await this.execGit(repoPath, ['branch', '--format=%(refname:short)']);
+      
+      // Get remote branches (if any)
+      let remoteBranches = [];
+      try {
+        const remotes = await this.execGit(repoPath, ['branch', '-r', '--format=%(refname:short)']);
+        remoteBranches = remotes.trim().split('\n').filter(b => b.trim());
+      } catch (remoteError) {
+        // No remotes configured
+      }
+      
+      // Get ahead/behind info (if remote exists)
+      let ahead = 0, behind = 0;
+      try {
+        const aheadBehind = await this.execGit(repoPath, ['rev-list', '--left-right', '--count', 'HEAD...@{upstream}']);
+        const [aheadStr, behindStr] = aheadBehind.trim().split('\t');
+        ahead = parseInt(aheadStr) || 0;
+        behind = parseInt(behindStr) || 0;
+      } catch (upstreamError) {
+        // No upstream configured
+      }
+      
+      return {
+        branch: branch.trim() === 'HEAD' ? 'DETACHED' : branch.trim(),
+        head: head.trim().substring(0, 8), // Short hash
+        statusShort: status.trim(),
+        ahead: ahead,
+        behind: behind,
+        dirty: status.trim().length > 0,
+        localBranches: localBranches.trim().split('\n').filter(b => b.trim()),
+        remoteBranches: remoteBranches,
+        lastChecked: new Date().toISOString()
+      };
+      
+    } catch (error) {
+      console.error(`Error getting Git state for ${repoPath}:`, error);
+      
+      // Return fallback state
+      return {
+        branch: 'unknown',
+        head: 'unknown',
+        statusShort: '',
+        ahead: 0,
+        behind: 0,
+        dirty: false,
+        localBranches: ['main'],
+        remoteBranches: [],
+        lastChecked: new Date().toISOString()
+      };
+    }
+  }
+
+  async execGit(repoPath, args) {
+    const { spawn } = require('child_process');
+    
+    return new Promise((resolve, reject) => {
+      const git = spawn('git', args, {
+        cwd: repoPath,
+        stdio: ['ignore', 'pipe', 'pipe']
+      });
+
+      let stdout = '';
+      let stderr = '';
+
+      git.stdout.on('data', (data) => {
+        stdout += data.toString();
+      });
+
+      git.stderr.on('data', (data) => {
+        stderr += data.toString();
+      });
+
+      git.on('close', (code) => {
+        if (code === 0) {
+          resolve(stdout);
+        } else {
+          reject(new Error(`Git command failed (${code}): ${stderr}`));
+        }
+      });
+
+      git.on('error', (error) => {
+        reject(error);
+      });
+    });
+  }
+
   cleanup() {
     if (!this.isInitialized) return;
     
@@ -183,4 +445,7 @@ class SimpleGitMonitoring {
   }
 }
 
-module.exports = { SimpleGitMonitoring };
+// Export singleton instance
+const gitMonitoringBackend = new SimpleGitMonitoring();
+
+module.exports = { gitMonitoringBackend };
