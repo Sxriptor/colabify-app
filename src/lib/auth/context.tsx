@@ -142,7 +142,41 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     getInitialSession()
-  }, [supabase.auth, ensureCustomUserExists, convertElectronUserToSupabaseUser])
+
+    // Set up periodic auth check for Electron to catch auth state changes
+    let authCheckInterval: NodeJS.Timeout | null = null
+    if (checkIsElectron()) {
+      authCheckInterval = setInterval(async () => {
+        try {
+          const electronAPI = (window as any).electronAPI
+          const isAuthenticated = await electronAPI.isAuthenticated()
+          
+          // If auth state changed, update context
+          if (isAuthenticated && !user) {
+            console.log('🔄 Periodic check: Auth state changed, updating context')
+            const electronUser = await electronAPI.getUser()
+            if (electronUser) {
+              const supabaseUser = convertElectronUserToSupabaseUser(electronUser)
+              setUser(supabaseUser)
+              await ensureCustomUserExists(supabaseUser)
+            }
+          } else if (!isAuthenticated && user) {
+            console.log('🔄 Periodic check: User signed out, clearing context')
+            setUser(null)
+            setCustomUser(null)
+          }
+        } catch (err) {
+          console.error('❌ Error in periodic auth check:', err)
+        }
+      }, 2000) // Check every 2 seconds
+    }
+
+    return () => {
+      if (authCheckInterval) {
+        clearInterval(authCheckInterval)
+      }
+    }
+  }, [supabase.auth, ensureCustomUserExists, convertElectronUserToSupabaseUser, user])
 
   // Set up auth event listeners
   useEffect(() => {
@@ -153,8 +187,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.log('🎧 Setting up Electron auth event listeners')
       
       // Test IPC communication
-      if (electronAPI.onTestEvent) {
-        electronAPI.onTestEvent((data: any) => {
+      if ((electronAPI as any).onTestEvent) {
+        (electronAPI as any).onTestEvent((data: any) => {
           console.log('✅ CONTEXT: test-event received!', data);
         });
       }
@@ -162,6 +196,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       electronAPI.onAuthSuccess(async (data: any) => {
         console.log('🔔 Auth success event received in context:', data)
         try {
+          // Immediately set loading to false to unblock UI
+          setLoading(false)
+          
           // Get the token from Electron and set it in Supabase
           const isAuthenticated = await electronAPI.isAuthenticated()
           if (isAuthenticated) {
@@ -172,10 +209,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               setUser(supabaseUser)
               await ensureCustomUserExists(supabaseUser)
               console.log('✅ User state updated after auth success')
+              
+              // Force a state update by triggering a re-render
+              setUser(prev => ({ ...supabaseUser }))
             }
           }
         } catch (err) {
           console.error('❌ Error handling auth success in context:', err)
+          setLoading(false)
         }
       })
 

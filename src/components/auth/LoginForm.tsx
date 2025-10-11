@@ -10,6 +10,7 @@ export function LoginForm() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [isClient, setIsClient] = useState(false)
+  const [checkingAuth, setCheckingAuth] = useState(true)
   const supabase = createClient()
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -21,6 +22,26 @@ export function LoginForm() {
     // Set client-side flag to prevent hydration mismatch
     setIsClient(true)
 
+    // Check if user is already authenticated before showing login form
+    const checkExistingAuth = async () => {
+      if (typeof window !== 'undefined' && window.electronAPI?.isElectron) {
+        try {
+          const electronAPI = window.electronAPI
+          const isAuthenticated = await electronAPI.isAuthenticated()
+          if (isAuthenticated) {
+            console.log('🔄 User already authenticated, redirecting to dashboard')
+            router.replace('/dashboard')
+            return
+          }
+        } catch (err) {
+          console.error('❌ Error checking existing auth:', err)
+        }
+      }
+      setCheckingAuth(false)
+    }
+
+    checkExistingAuth()
+
     // Set up auth event listeners for Electron
     if (typeof window !== 'undefined' && window.electronAPI?.isElectron) {
       const electronAPI = window.electronAPI
@@ -28,8 +49,8 @@ export function LoginForm() {
       console.log('🎧 LoginForm: Setting up auth event listeners...')
 
       // Test if test-event listener works
-      if (electronAPI.onTestEvent) {
-        electronAPI.onTestEvent((data: any) => {
+      if ((electronAPI as any).onTestEvent) {
+        (electronAPI as any).onTestEvent((data: any) => {
           console.log('✅ LoginForm: test-event received!', data)
         })
       }
@@ -49,13 +70,13 @@ export function LoginForm() {
           const { data: { session } } = await supabase.auth.getSession()
           console.log('🔄 Current session:', session)
 
-          // Redirect to dashboard
+          // Redirect to dashboard immediately
           console.log('🚀 Redirecting to dashboard...')
-          router.push('/dashboard')
+          router.replace('/dashboard')
         } catch (err) {
           console.error('❌ Error handling auth success:', err)
           // Still try to redirect
-          router.push('/dashboard')
+          router.replace('/dashboard')
         }
       })
 
@@ -76,6 +97,18 @@ export function LoginForm() {
       console.log('⚠️ LoginForm: Not in Electron, skipping event listeners')
     }
   }, [router, supabase.auth])
+
+  // Show loading while checking auth
+  if (checkingAuth) {
+    return (
+      <div className="space-y-6">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto"></div>
+          <p className="mt-2 text-sm text-gray-600">Checking authentication...</p>
+        </div>
+      </div>
+    )
+  }
 
   const handleSignIn = async () => {
     setLoading(true)

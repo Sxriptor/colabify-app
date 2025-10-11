@@ -3,17 +3,22 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { useAuth } from '@/lib/auth/context'
+import { useRouter } from 'next/navigation'
 
-export function ElectronAuthHandler() {
+export function HomePageWithAuthHandler() {
   const searchParams = useSearchParams()
+  const { user, loading } = useAuth()
+  const router = useRouter()
   const [isProcessingCallback, setIsProcessingCallback] = useState(false)
 
+  // Handle Electron OAuth callback
   useEffect(() => {
     const handleElectronAuth = async () => {
       // Check if this is an OAuth callback with a code
       const code = searchParams.get('code')
       const error = searchParams.get('error')
-
+      
       if (!code && !error) {
         return // Not an OAuth callback
       }
@@ -22,16 +27,16 @@ export function ElectronAuthHandler() {
       console.log('Code:', !!code)
       console.log('Error:', error)
 
-      // Set processing state to prevent HomePage from redirecting
+      // Set processing state to prevent normal home page logic from running
       setIsProcessingCallback(true)
 
       // Check if this might be for Electron (we'll assume it is since it's on root page)
       if (code) {
         try {
           console.log('🔄 Processing OAuth code for potential Electron flow')
-
+          
           const supabase = createClient()
-
+          
           // Exchange code for session
           const { data, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code)
 
@@ -43,11 +48,11 @@ export function ElectronAuthHandler() {
 
           if (data.session) {
             console.log('✅ Session obtained, redirecting to Electron')
-
+            
             // Redirect to Electron app with token
             const electronUrl = `colabify://auth/callback?token=${data.session.access_token}`
             console.log('🚀 Redirecting to:', electronUrl)
-
+            
             // Show user feedback
             document.body.innerHTML = `
               <div style="
@@ -88,10 +93,10 @@ export function ElectronAuthHandler() {
                 </style>
               </div>
             `
-
+            
             // Attempt redirect
             window.location.href = electronUrl
-
+            
             // Keep processing state true to prevent any other redirects
             return
           }
@@ -105,7 +110,47 @@ export function ElectronAuthHandler() {
     handleElectronAuth()
   }, [searchParams])
 
-  // If we're processing a callback, render a loading state to prevent HomePage from rendering
+  // Handle normal home page logic (only if not processing callback)
+  useEffect(() => {
+    if (!isProcessingCallback && !loading) {
+      // Check if we're in Electron and if so, check auth state directly
+      const checkElectronAuth = async () => {
+        if (typeof window !== 'undefined' && (window as any).electronAPI?.isElectron) {
+          try {
+            const electronAPI = (window as any).electronAPI
+            const isAuthenticated = await electronAPI.isAuthenticated()
+            console.log('🔍 Direct Electron auth check:', isAuthenticated)
+            
+            if (isAuthenticated) {
+              console.log('✅ Electron user authenticated, redirecting to dashboard')
+              router.replace('/dashboard')
+              return
+            }
+          } catch (err) {
+            console.error('❌ Error checking Electron auth:', err)
+          }
+        }
+        
+        // Fallback to regular user state check
+        if (user) {
+          console.log('✅ User authenticated via context, redirecting to dashboard')
+          router.replace('/dashboard')
+        } else {
+          // Add a longer delay before redirecting to login to give auth context more time to update
+          console.log('❌ User not authenticated, redirecting to login in 1000ms')
+          const timer = setTimeout(() => {
+            router.push('/login')
+          }, 1000)
+          
+          return () => clearTimeout(timer)
+        }
+      }
+      
+      checkElectronAuth()
+    }
+  }, [user, loading, router, isProcessingCallback])
+
+  // If we're processing a callback, show processing state
   if (isProcessingCallback) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gray-50">
@@ -117,5 +162,25 @@ export function ElectronAuthHandler() {
     )
   }
 
-  return null // This component doesn't render anything when not processing
+  // If still loading auth state, show loading
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading DevPulse...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Default state while redirecting
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-gray-50">
+      <div className="text-center">
+        <h1 className="text-4xl font-bold text-gray-900 mb-4">DevPulse</h1>
+        <p className="text-gray-600">Redirecting...</p>
+      </div>
+    </div>
+  )
 }
