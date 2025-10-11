@@ -119,24 +119,49 @@ export function ConnectRepositoryModal({ isOpen, onClose, projectId, onSuccess }
       } else {
         // Create new repository record
         console.log('🆕 Creating new repository record...')
-        const repositoryData = {
+        
+        // Try with minimal data first
+        let repositoryData: any = {
           project_id: projectId,
           name: repoName,
           full_name: fullName,
           url: githubUrl,
           owner: owner
         }
-        console.log('📝 Repository data:', repositoryData)
+        console.log('📝 Repository data (attempt 1):', repositoryData)
 
-        const { data: newRepo, error: repoError } = await supabase
+        let { data: newRepo, error: repoError } = await supabase
           .from('repositories')
           .insert(repositoryData)
           .select('id')
           .single()
 
+        // If it fails due to github_id constraint, try with github_id set to null
+        if (repoError && repoError.message?.includes('github_id')) {
+          console.log('🔄 Retrying with github_id set to null...')
+          repositoryData = {
+            ...repositoryData,
+            github_id: null
+          }
+          console.log('📝 Repository data (attempt 2):', repositoryData)
+
+          const result = await supabase
+            .from('repositories')
+            .insert(repositoryData)
+            .select('id')
+            .single()
+          
+          newRepo = result.data
+          repoError = result.error
+        }
+
         if (repoError) {
           console.error('❌ Error creating repository:', repoError)
           throw repoError
+        }
+        
+        if (!newRepo) {
+          throw new Error('Failed to create repository - no data returned')
         }
         
         console.log('✅ Created new repository:', newRepo.id)
