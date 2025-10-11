@@ -26,6 +26,9 @@ interface GitHubBranch {
     }
   }
   protected: boolean
+  aheadBy?: number
+  behindBy?: number
+  isDefault?: boolean
 }
 
 interface GitHubCommit {
@@ -42,6 +45,10 @@ interface GitHubCommit {
     login: string
     avatar_url: string
   }
+  stats?: {
+    additions: number
+    deletions: number
+  }
 }
 
 interface LocalUserLocation {
@@ -51,6 +58,20 @@ interface LocalUserLocation {
   localPath: string
   currentBranch?: string
   lastActivity?: string
+  status: 'online' | 'away' | 'offline'
+  commitsToday?: number
+}
+
+interface BranchNode {
+  id: string
+  name: string
+  x: number
+  y: number
+  color: string
+  isDefault?: boolean
+  protected?: boolean
+  commits: GitHubCommit[]
+  connections: string[]
 }
 
 export function RepoVisualizationModal({ isOpen, onClose, project }: RepoVisualizationModalProps) {
@@ -147,7 +168,10 @@ export function RepoVisualizationModal({ isOpen, onClose, project }: RepoVisuali
               message: 'Add new feature implementation'
             }
           },
-          protected: true
+          protected: true,
+          isDefault: true,
+          aheadBy: 0,
+          behindBy: 0
         },
         {
           name: 'develop',
@@ -165,7 +189,9 @@ export function RepoVisualizationModal({ isOpen, onClose, project }: RepoVisuali
               message: 'Fix bug in user authentication'
             }
           },
-          protected: false
+          protected: false,
+          aheadBy: 2,
+          behindBy: 1
         },
         {
           name: 'feature/new-dashboard',
@@ -183,7 +209,29 @@ export function RepoVisualizationModal({ isOpen, onClose, project }: RepoVisuali
               message: 'WIP: Dashboard redesign'
             }
           },
-          protected: false
+          protected: false,
+          aheadBy: 5,
+          behindBy: 3
+        },
+        {
+          name: 'hotfix/security-patch',
+          commit: {
+            sha: 'jkl012mno345',
+            author: {
+              login: 'alicedev',
+              avatar_url: 'https://github.com/alicedev.png'
+            },
+            commit: {
+              author: {
+                name: 'Alice Developer',
+                date: new Date(Date.now() - 3600000).toISOString()
+              },
+              message: 'Security: Fix XSS vulnerability'
+            }
+          },
+          protected: true,
+          aheadBy: 1,
+          behindBy: 0
         }
       ]
       
@@ -210,37 +258,88 @@ export function RepoVisualizationModal({ isOpen, onClose, project }: RepoVisuali
           author: {
             login: 'johndoe',
             avatar_url: 'https://github.com/johndoe.png'
-          }
+          },
+          stats: { additions: 127, deletions: 23 }
         },
         {
           sha: 'def456ghi789',
           commit: {
             author: {
-              name: 'Jane Doe',
+              name: 'Jane Smith',
               email: 'jane@example.com',
-              date: new Date(Date.now() - 86400000).toISOString()
+              date: new Date(Date.now() - 3600000).toISOString()
             },
-            message: 'Fix bug in user authentication'
+            message: 'Fix bug in user authentication system'
           },
           author: {
-            login: 'janedoe',
-            avatar_url: 'https://github.com/janedoe.png'
-          }
+            login: 'janesmith',
+            avatar_url: 'https://github.com/janesmith.png'
+          },
+          stats: { additions: 45, deletions: 12 }
         },
         {
           sha: 'ghi789jkl012',
           commit: {
             author: {
-              name: 'Bob Smith',
+              name: 'Bob Wilson',
               email: 'bob@example.com',
-              date: new Date(Date.now() - 172800000).toISOString()
+              date: new Date(Date.now() - 7200000).toISOString()
             },
-            message: 'Update documentation and add examples'
+            message: 'Refactor dashboard components for better performance'
           },
           author: {
-            login: 'bobsmith',
-            avatar_url: 'https://github.com/bobsmith.png'
-          }
+            login: 'bobwilson',
+            avatar_url: 'https://github.com/bobwilson.png'
+          },
+          stats: { additions: 89, deletions: 156 }
+        },
+        {
+          sha: 'jkl012mno345',
+          commit: {
+            author: {
+              name: 'Alice Chen',
+              email: 'alice@example.com',
+              date: new Date(Date.now() - 10800000).toISOString()
+            },
+            message: 'Security: Fix XSS vulnerability in user input'
+          },
+          author: {
+            login: 'alicechen',
+            avatar_url: 'https://github.com/alicechen.png'
+          },
+          stats: { additions: 34, deletions: 8 }
+        },
+        {
+          sha: 'mno345pqr678',
+          commit: {
+            author: {
+              name: 'John Doe',
+              email: 'john@example.com',
+              date: new Date(Date.now() - 86400000).toISOString()
+            },
+            message: 'Update API documentation and examples'
+          },
+          author: {
+            login: 'johndoe',
+            avatar_url: 'https://github.com/johndoe.png'
+          },
+          stats: { additions: 67, deletions: 5 }
+        },
+        {
+          sha: 'pqr678stu901',
+          commit: {
+            author: {
+              name: 'Jane Smith',
+              email: 'jane@example.com',
+              date: new Date(Date.now() - 172800000).toISOString()
+            },
+            message: 'Add unit tests for authentication module'
+          },
+          author: {
+            login: 'janesmith',
+            avatar_url: 'https://github.com/janesmith.png'
+          },
+          stats: { additions: 234, deletions: 0 }
         }
       ]
       
@@ -257,12 +356,58 @@ export function RepoVisualizationModal({ isOpen, onClose, project }: RepoVisuali
       
       const mockUsers: LocalUserLocation[] = localMappings.map((mapping: any, index: number) => ({
         userId: mapping.user?.id || `user-${index}`,
-        userName: mapping.user?.name || 'Unknown User',
-        userEmail: mapping.user?.email || 'unknown@example.com',
-        localPath: mapping.local_path,
-        currentBranch: ['main', 'develop', 'feature/new-dashboard'][index % 3],
-        lastActivity: new Date(Date.now() - Math.random() * 86400000 * 7).toISOString()
+        userName: mapping.user?.name || ['JOHN.DOE', 'JANE.SMITH', 'BOB.WILSON', 'ALICE.CHEN'][index % 4],
+        userEmail: mapping.user?.email || ['john@company.com', 'jane@company.com', 'bob@company.com', 'alice@company.com'][index % 4],
+        localPath: mapping.local_path || [
+          '/Users/john/workspace/project',
+          '/home/jane/dev/project',
+          'C:\\Users\\Bob\\Projects\\project',
+          '/Users/alice/code/project'
+        ][index % 4],
+        currentBranch: ['main', 'develop', 'feature/new-dashboard', 'hotfix/security-patch'][index % 4],
+        lastActivity: new Date(Date.now() - Math.random() * 86400000 * 3).toISOString(),
+        status: ['online', 'away', 'online', 'online'][index % 4] as 'online' | 'away' | 'offline',
+        commitsToday: [3, 1, 5, 2][index % 4]
       }))
+      
+      // Add some default users if no mappings exist
+      if (mockUsers.length === 0) {
+        const defaultUsers: LocalUserLocation[] = [
+          {
+            userId: 'user-1',
+            userName: 'JOHN.DOE',
+            userEmail: 'john@company.com',
+            localPath: '/Users/john/workspace/project',
+            currentBranch: 'main',
+            lastActivity: new Date(Date.now() - 3600000).toISOString(),
+            status: 'online',
+            commitsToday: 3
+          },
+          {
+            userId: 'user-2',
+            userName: 'JANE.SMITH',
+            userEmail: 'jane@company.com',
+            localPath: '/home/jane/dev/project',
+            currentBranch: 'develop',
+            lastActivity: new Date(Date.now() - 7200000).toISOString(),
+            status: 'away',
+            commitsToday: 1
+          },
+          {
+            userId: 'user-3',
+            userName: 'BOB.WILSON',
+            userEmail: 'bob@company.com',
+            localPath: 'C:\\Users\\Bob\\Projects\\project',
+            currentBranch: 'feature/new-dashboard',
+            lastActivity: new Date(Date.now() - 1800000).toISOString(),
+            status: 'online',
+            commitsToday: 5
+          }
+        ]
+        setLocalUsers(defaultUsers)
+      } else {
+        setLocalUsers(mockUsers)
+      }
       
       setLocalUsers(mockUsers)
     } catch (error) {
@@ -285,64 +430,84 @@ export function RepoVisualizationModal({ isOpen, onClose, project }: RepoVisuali
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl max-w-6xl w-full max-h-[90vh] overflow-hidden">
+    <div className="fixed inset-0 bg-black bg-opacity-90 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="bg-black border border-gray-800 rounded-none shadow-2xl max-w-7xl w-full max-h-[95vh] overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-200">
-          <div>
-            <h2 className="text-xl font-semibold text-gray-900">Repository Visualization</h2>
-            <p className="text-sm text-gray-500 mt-1">
-              {project?.name} • {project?.repositories?.[0]?.name}
-            </p>
+        <div className="relative bg-black border-b border-gray-800 p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-2xl font-bold mb-1 text-white font-mono">REPOSITORY.VISUALIZATION</h2>
+              <p className="text-gray-400 flex items-center space-x-2 font-mono text-sm">
+                <span className="w-2 h-2 bg-white rounded-none animate-pulse"></span>
+                <span>{project?.name?.toUpperCase()}</span>
+                <span>/</span>
+                <span>{project?.repositories?.[0]?.name?.toUpperCase()}</span>
+              </p>
+            </div>
+            <button
+              onClick={onClose}
+              className="text-gray-400 hover:text-white transition-colors p-2 hover:bg-gray-800 rounded-none border border-gray-700"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
           </div>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 transition-colors"
-          >
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
+          
+          {/* Grid pattern */}
+          <div className="absolute inset-0 opacity-5">
+            <div className="absolute inset-0" style={{
+              backgroundImage: `linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px)`,
+              backgroundSize: '20px 20px'
+            }}></div>
+          </div>
         </div>
 
-        {/* Tabs */}
-        <div className="border-b border-gray-200">
-          <nav className="flex space-x-8 px-6">
+        {/* Minimal Tabs */}
+        <div className="bg-black border-b border-gray-800">
+          <nav className="flex px-6">
             {[
-              { id: 'overview', label: 'Overview', icon: '📊' },
-              { id: 'branches', label: 'Branches', icon: '🌿' },
-              { id: 'users', label: 'Users', icon: '👥' }
+              { id: 'overview', label: 'OVERVIEW' },
+              { id: 'branches', label: 'GIT.GRAPH' },
+              { id: 'users', label: 'TEAM.STATUS' }
             ].map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id as any)}
-                className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
+                className={`relative py-4 px-6 font-mono text-xs font-medium transition-all duration-200 ${
                   activeTab === tab.id
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    ? 'text-white bg-gray-900 border-l border-r border-gray-700'
+                    : 'text-gray-500 hover:text-gray-300 hover:bg-gray-900'
                 }`}
               >
-                <span className="mr-2">{tab.icon}</span>
                 {tab.label}
+                {activeTab === tab.id && (
+                  <div className="absolute bottom-0 left-0 right-0 h-px bg-white"></div>
+                )}
               </button>
             ))}
           </nav>
         </div>
 
         {/* Content */}
-        <div className="p-6 overflow-y-auto max-h-[calc(90vh-200px)]">
+        <div className="bg-black p-8 overflow-y-auto max-h-[calc(95vh-200px)]">
           {loading ? (
             <div className="flex items-center justify-center h-64">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+              <div className="border border-gray-600 rounded-none p-4">
+                <div className="text-white font-mono text-sm">LOADING.REPOSITORY.DATA...</div>
+                <div className="mt-2 w-32 h-1 bg-gray-800">
+                  <div className="h-full bg-white animate-pulse w-1/3"></div>
+                </div>
+              </div>
             </div>
           ) : error ? (
-            <div className="text-center py-12">
-              <div className="text-red-500 mb-4">⚠️ {error}</div>
+            <div className="text-center py-12 border border-gray-800 bg-gray-900">
+              <div className="text-red-400 mb-4 font-mono">ERROR: {error}</div>
               <button
                 onClick={fetchRepositoryData}
-                className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-md text-sm"
+                className="bg-white text-black px-6 py-2 font-mono text-sm hover:bg-gray-200 transition-colors"
               >
-                Retry
+                RETRY.CONNECTION
               </button>
             </div>
           ) : (
@@ -350,221 +515,401 @@ export function RepoVisualizationModal({ isOpen, onClose, project }: RepoVisuali
               {/* Overview Tab */}
               {activeTab === 'overview' && (
                 <div className="space-y-8">
-                  {/* Repository Stats */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div className="bg-blue-50 rounded-lg p-4">
-                      <div className="flex items-center">
-                        <div className="text-blue-500 text-2xl mr-3">🌿</div>
-                        <div>
-                          <div className="text-2xl font-bold text-blue-600">{branches.length}</div>
-                          <div className="text-sm text-blue-600">Branches</div>
-                        </div>
+                  {/* Metrics Grid */}
+                  <div className="grid grid-cols-4 gap-px bg-gray-800">
+                    <div className="bg-black p-6 border border-gray-800">
+                      <div className="text-gray-400 font-mono text-xs mb-2">BRANCHES.ACTIVE</div>
+                      <div className="text-white font-mono text-3xl font-bold">{branches.length.toString().padStart(2, '0')}</div>
+                      <div className="text-gray-500 font-mono text-xs mt-2">
+                        {branches.filter(b => b.isDefault).length} DEFAULT / {branches.filter(b => b.protected).length} PROTECTED
                       </div>
                     </div>
-                    <div className="bg-green-50 rounded-lg p-4">
-                      <div className="flex items-center">
-                        <div className="text-green-500 text-2xl mr-3">👥</div>
-                        <div>
-                          <div className="text-2xl font-bold text-green-600">{localUsers.length}</div>
-                          <div className="text-sm text-green-600">Local Users</div>
-                        </div>
+                    
+                    <div className="bg-black p-6 border border-gray-800">
+                      <div className="text-gray-400 font-mono text-xs mb-2">TEAM.MEMBERS</div>
+                      <div className="text-white font-mono text-3xl font-bold">{localUsers.length.toString().padStart(2, '0')}</div>
+                      <div className="text-gray-500 font-mono text-xs mt-2">
+                        {localUsers.filter(u => u.status === 'online').length} ONLINE / {localUsers.filter(u => u.status === 'away').length} AWAY
                       </div>
                     </div>
-                    <div className="bg-purple-50 rounded-lg p-4">
-                      <div className="flex items-center">
-                        <div className="text-purple-500 text-2xl mr-3">📝</div>
-                        <div>
-                          <div className="text-2xl font-bold text-purple-600">{commits.length}</div>
-                          <div className="text-sm text-purple-600">Recent Commits</div>
-                        </div>
+                    
+                    <div className="bg-black p-6 border border-gray-800">
+                      <div className="text-gray-400 font-mono text-xs mb-2">COMMITS.RECENT</div>
+                      <div className="text-white font-mono text-3xl font-bold">{commits.length.toString().padStart(2, '0')}</div>
+                      <div className="text-gray-500 font-mono text-xs mt-2">
+                        {commits.filter(c => new Date(c.commit.author.date) > new Date(Date.now() - 86400000)).length} TODAY
+                      </div>
+                    </div>
+                    
+                    <div className="bg-black p-6 border border-gray-800">
+                      <div className="text-gray-400 font-mono text-xs mb-2">ACTIVITY.SCORE</div>
+                      <div className="text-white font-mono text-3xl font-bold">{(Math.floor(Math.random() * 50) + 10).toString().padStart(2, '0')}</div>
+                      <div className="text-gray-500 font-mono text-xs mt-2">
+                        HIGH.ACTIVITY
                       </div>
                     </div>
                   </div>
 
-                  {/* Recent Activity */}
-                  <div>
-                    <h3 className="text-lg font-medium text-gray-900 mb-4">Recent Git History</h3>
-                    <div className="space-y-3">
-                      {commits.slice(0, 5).map((commit) => (
-                        <div key={commit.sha} className="flex items-start space-x-3 p-3 bg-gray-50 rounded-lg">
-                          <img
-                            src={commit.author?.avatar_url || '/default-avatar.png'}
-                            alt={commit.author?.login}
-                            className="w-8 h-8 rounded-full"
-                          />
-                          <div className="flex-1 min-w-0">
-                            <div className="text-sm font-medium text-gray-900">
-                              {commit.commit.message}
+                  {/* Activity Visualization */}
+                  <div className="border border-gray-800 bg-black">
+                    <div className="border-b border-gray-800 p-4">
+                      <h3 className="text-white font-mono text-sm">COMMIT.FREQUENCY.ANALYSIS</h3>
+                    </div>
+                    <div className="p-6">
+                      {/* ASCII-style commit frequency chart */}
+                      <div className="font-mono text-xs space-y-1">
+                        {Array.from({ length: 7 }).map((_, dayIndex) => {
+                          const dayName = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'][dayIndex]
+                          const commitCount = Math.floor(Math.random() * 20)
+                          const barLength = Math.floor((commitCount / 20) * 40)
+                          
+                          return (
+                            <div key={dayIndex} className="flex items-center space-x-2">
+                              <span className="text-gray-400 w-8">{dayName}</span>
+                              <span className="text-gray-600">|</span>
+                              <div className="flex">
+                                {Array.from({ length: 40 }).map((_, i) => (
+                                  <span key={i} className={i < barLength ? 'text-white' : 'text-gray-800'}>
+                                    ▓
+                                  </span>
+                                ))}
+                              </div>
+                              <span className="text-gray-400 ml-2">{commitCount.toString().padStart(2, '0')}</span>
                             </div>
-                            <div className="text-xs text-gray-500 mt-1">
-                              {commit.commit.author.name} • {formatTimeAgo(commit.commit.author.date)}
-                            </div>
-                          </div>
-                          <div className="text-xs text-gray-400 font-mono">
-                            {commit.sha.substring(0, 7)}
-                          </div>
-                        </div>
-                      ))}
+                          )
+                        })}
+                      </div>
                     </div>
                   </div>
 
-                  {/* User Locations */}
-                  <div>
-                    <h3 className="text-lg font-medium text-gray-900 mb-4">User Locations</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {localUsers.map((userLoc) => (
-                        <div key={userLoc.userId} className="border border-gray-200 rounded-lg p-4">
-                          <div className="flex items-center space-x-3 mb-2">
-                            <div className="w-8 h-8 bg-gray-300 rounded-full flex items-center justify-center text-sm font-medium">
-                              {userLoc.userName.charAt(0).toUpperCase()}
-                            </div>
-                            <div>
-                              <div className="font-medium text-gray-900">{userLoc.userName}</div>
-                              <div className="text-xs text-gray-500">{userLoc.userEmail}</div>
-                            </div>
+                  {/* Terminal-style Activity Log */}
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                    <div className="border border-gray-800 bg-black">
+                      <div className="border-b border-gray-800 p-4 bg-gray-900">
+                        <div className="flex items-center justify-between">
+                          <h3 className="text-white font-mono text-sm">ACTIVITY.LOG</h3>
+                          <div className="flex space-x-2">
+                            <div className="w-3 h-3 bg-red-500 rounded-full"></div>
+                            <div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
+                            <div className="w-3 h-3 bg-green-500 rounded-full"></div>
                           </div>
-                          <div className="text-sm text-gray-600 mb-1">
-                            <span className="font-medium">Branch:</span> {userLoc.currentBranch}
-                          </div>
-                          <div className="text-xs text-gray-500 truncate">
-                            <span className="font-medium">Path:</span> {userLoc.localPath}
-                          </div>
-                          {userLoc.lastActivity && (
-                            <div className="text-xs text-gray-400 mt-2">
-                              Last activity: {formatTimeAgo(userLoc.lastActivity)}
-                            </div>
-                          )}
                         </div>
-                      ))}
+                      </div>
+                      <div className="p-4 h-80 overflow-y-auto">
+                        <div className="font-mono text-xs space-y-2">
+                          {commits.slice(0, 8).map((commit, index) => (
+                            <div key={commit.sha} className="text-gray-300">
+                              <div className="flex items-start space-x-2">
+                                <span className="text-gray-600">[{formatTimeAgo(commit.commit.author.date).replace(' ago', '').toUpperCase()}]</span>
+                                <span className="text-white">COMMIT</span>
+                                <span className="text-gray-400">{commit.sha.substring(0, 7)}</span>
+                              </div>
+                              <div className="ml-4 text-gray-400 mt-1">
+                                └─ {commit.commit.message.substring(0, 60)}
+                                {commit.commit.message.length > 60 && '...'}
+                              </div>
+                              <div className="ml-4 text-gray-600 text-xs">
+                                BY: {commit.commit.author.name.toUpperCase()}
+                                {commit.stats && (
+                                  <span className="ml-4">
+                                    +{commit.stats.additions} -{commit.stats.deletions}
+                                  </span>
+                                )}
+                              </div>
+                              {index < commits.length - 1 && <div className="text-gray-800 ml-2">│</div>}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Team Status Terminal */}
+                    <div className="border border-gray-800 bg-black">
+                      <div className="border-b border-gray-800 p-4 bg-gray-900">
+                        <div className="flex items-center justify-between">
+                          <h3 className="text-white font-mono text-sm">TEAM.STATUS</h3>
+                          <div className="text-gray-400 font-mono text-xs">
+                            {localUsers.filter(u => u.status === 'online').length}/{localUsers.length} ONLINE
+                          </div>
+                        </div>
+                      </div>
+                      <div className="p-4 h-80 overflow-y-auto">
+                        <div className="font-mono text-xs space-y-3">
+                          {localUsers.map((userLoc, index) => (
+                            <div key={userLoc.userId} className="border-l-2 border-gray-700 pl-4">
+                              <div className="flex items-center justify-between mb-1">
+                                <div className="flex items-center space-x-2">
+                                  <div className={`w-2 h-2 ${
+                                    userLoc.status === 'online' ? 'bg-green-400' :
+                                    userLoc.status === 'away' ? 'bg-yellow-400' : 'bg-gray-600'
+                                  }`}></div>
+                                  <span className="text-white font-bold">{userLoc.userName.toUpperCase()}</span>
+                                </div>
+                                <span className="text-gray-400">{userLoc.status.toUpperCase()}</span>
+                              </div>
+                              
+                              <div className="text-gray-400 ml-4 space-y-1">
+                                <div>BRANCH: <span className="text-white">{userLoc.currentBranch}</span></div>
+                                <div>LAST: <span className="text-white">
+                                  {userLoc.lastActivity ? formatTimeAgo(userLoc.lastActivity).toUpperCase() : 'UNKNOWN'}
+                                </span></div>
+                                {userLoc.commitsToday && (
+                                  <div>TODAY: <span className="text-green-400">{userLoc.commitsToday} COMMITS</span></div>
+                                )}
+                              </div>
+                              
+                              <div className="mt-2 ml-4 text-gray-600 text-xs break-all">
+                                PATH: {userLoc.localPath}
+                              </div>
+                              
+                              {index < localUsers.length - 1 && (
+                                <div className="mt-2 text-gray-800">
+                                  ────────────────────────────────────
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
               )}
 
-              {/* Branches Tab */}
+              {/* Git Graph Tab */}
               {activeTab === 'branches' && (
                 <div className="space-y-6">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-lg font-medium text-gray-900">Repository Branches</h3>
-                    <div className="text-sm text-gray-500">
-                      {branches.length} branch{branches.length !== 1 ? 'es' : ''}
+                  {/* Header */}
+                  <div className="flex items-center justify-between border-b border-gray-800 pb-4">
+                    <div>
+                      <h3 className="text-white font-mono text-lg">GIT.BRANCH.GRAPH</h3>
+                      <p className="text-gray-400 font-mono text-xs mt-1">REPOSITORY.TOPOLOGY.VISUALIZATION</p>
+                    </div>
+                    <div className="flex items-center space-x-4">
+                      <div className="text-gray-400 font-mono text-xs border border-gray-700 px-3 py-1">
+                        {branches.length.toString().padStart(2, '0')} BRANCHES
+                      </div>
+                      <button className="text-black bg-white px-4 py-1 font-mono text-xs hover:bg-gray-200 transition-colors">
+                        REFRESH.GRAPH
+                      </button>
                     </div>
                   </div>
 
-                  <div className="space-y-4">
-                    {branches.map((branch) => (
-                      <div key={branch.name} className="border border-gray-200 rounded-lg p-4">
-                        <div className="flex items-start justify-between">
-                          <div className="flex-1">
-                            <div className="flex items-center space-x-2 mb-2">
-                              <span className="font-medium text-gray-900">{branch.name}</span>
-                              {branch.protected && (
-                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800">
-                                  🔒 Protected
-                                </span>
-                              )}
-                              {branch.name === 'main' && (
-                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
-                                  Default
-                                </span>
-                              )}
-                            </div>
-                            
-                            <div className="flex items-center space-x-3 text-sm text-gray-600">
-                              <img
-                                src={branch.commit.author?.avatar_url || '/default-avatar.png'}
-                                alt={branch.commit.author?.login}
-                                className="w-6 h-6 rounded-full"
-                              />
-                              <span>{branch.commit.commit.author.name}</span>
-                              <span>•</span>
-                              <span>{formatTimeAgo(branch.commit.commit.author.date)}</span>
-                            </div>
-                            
-                            <div className="text-sm text-gray-700 mt-2">
-                              {branch.commit.commit.message}
-                            </div>
-                          </div>
-                          
-                          <div className="text-xs text-gray-400 font-mono ml-4">
-                            {branch.commit.sha.substring(0, 7)}
-                          </div>
-                        </div>
-
-                        {/* Users on this branch */}
-                        <div className="mt-4 pt-3 border-t border-gray-100">
-                          <div className="text-xs font-medium text-gray-500 mb-2">Users on this branch:</div>
-                          <div className="flex flex-wrap gap-2">
-                            {localUsers
-                              .filter(user => user.currentBranch === branch.name)
-                              .map(user => (
-                                <div key={user.userId} className="flex items-center space-x-1 bg-gray-100 rounded-full px-2 py-1">
-                                  <div className="w-4 h-4 bg-gray-400 rounded-full flex items-center justify-center text-xs text-white">
-                                    {user.userName.charAt(0).toUpperCase()}
-                                  </div>
-                                  <span className="text-xs text-gray-700">{user.userName}</span>
+                  {/* ASCII Git Graph */}
+                  <div className="border border-gray-800 bg-black font-mono text-xs overflow-x-auto">
+                    <div className="p-6">
+                      {branches.map((branch, index) => {
+                        const branchChars = ['*', '+', 'o', 'x', '#', '@']
+                        const branchChar = branchChars[index % branchChars.length]
+                        const isMain = branch.name === 'main' || branch.isDefault
+                        const isProtected = branch.protected
+                        
+                        return (
+                          <div key={branch.name} className="mb-6">
+                            {/* Branch Header */}
+                            <div className="flex items-center space-x-4 mb-2">
+                              <div className="flex items-center space-x-2 w-64">
+                                {/* ASCII Branch Line */}
+                                <div className="flex items-center">
+                                  {Array.from({ length: index }).map((_, i) => (
+                                    <span key={i} className="text-gray-700">│ </span>
+                                  ))}
+                                  <span className="text-white font-bold">{branchChar}</span>
+                                  <span className="text-gray-600">─</span>
                                 </div>
-                              ))}
-                            {localUsers.filter(user => user.currentBranch === branch.name).length === 0 && (
-                              <span className="text-xs text-gray-400 italic">No local users</span>
+                                
+                                {/* Branch Name */}
+                                <span className="text-white font-bold">{branch.name.toUpperCase()}</span>
+                                
+                                {/* Branch Tags */}
+                                {isMain && <span className="text-gray-400 border border-gray-600 px-1">MAIN</span>}
+                                {isProtected && <span className="text-gray-400 border border-gray-600 px-1">PROTECTED</span>}
+                              </div>
+                              
+                              {/* Commit Hash */}
+                              <span className="text-gray-500">{branch.commit.sha.substring(0, 7)}</span>
+                            </div>
+                            
+                            {/* Branch Details */}
+                            <div className="ml-8 space-y-1 text-gray-400">
+                              <div>
+                                AUTHOR: <span className="text-white">{branch.commit.commit.author.name.toUpperCase()}</span>
+                              </div>
+                              <div>
+                                DATE: <span className="text-white">{formatTimeAgo(branch.commit.commit.author.date).toUpperCase()}</span>
+                              </div>
+                              <div>
+                                MESSAGE: <span className="text-white">{branch.commit.commit.message}</span>
+                              </div>
+                              
+                              {/* Branch Stats */}
+                              <div className="flex items-center space-x-4 mt-2">
+                                {branch.aheadBy !== undefined && (
+                                  <span>AHEAD: <span className="text-green-400">{branch.aheadBy.toString().padStart(2, '0')}</span></span>
+                                )}
+                                {branch.behindBy !== undefined && (
+                                  <span>BEHIND: <span className="text-red-400">{branch.behindBy.toString().padStart(2, '0')}</span></span>
+                                )}
+                              </div>
+                              
+                              {/* Users on Branch */}
+                              <div className="mt-2">
+                                USERS: {localUsers
+                                  .filter(user => user.currentBranch === branch.name)
+                                  .map(user => user.userName.toUpperCase())
+                                  .join(', ') || 'NONE'}
+                              </div>
+                            </div>
+                            
+                            {/* ASCII Connection Line */}
+                            {index < branches.length - 1 && (
+                              <div className="ml-2 mt-2 text-gray-700">
+                                {Array.from({ length: index }).map((_, i) => (
+                                  <span key={i}>│ </span>
+                                ))}
+                                <span>│</span>
+                              </div>
                             )}
                           </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Branch Statistics */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="border border-gray-800 bg-black p-4">
+                      <h4 className="text-white font-mono text-sm mb-3">BRANCH.STATISTICS</h4>
+                      <div className="space-y-2 font-mono text-xs">
+                        <div className="flex justify-between">
+                          <span className="text-gray-400">TOTAL.BRANCHES:</span>
+                          <span className="text-white">{branches.length.toString().padStart(2, '0')}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-400">PROTECTED:</span>
+                          <span className="text-white">{branches.filter(b => b.protected).length.toString().padStart(2, '0')}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-400">DEFAULT:</span>
+                          <span className="text-white">{branches.filter(b => b.isDefault).length.toString().padStart(2, '0')}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-400">ACTIVE.USERS:</span>
+                          <span className="text-white">{new Set(localUsers.map(u => u.currentBranch)).size.toString().padStart(2, '0')}</span>
                         </div>
                       </div>
-                    ))}
+                    </div>
+                    
+                    <div className="border border-gray-800 bg-black p-4">
+                      <h4 className="text-white font-mono text-sm mb-3">LEGEND</h4>
+                      <div className="space-y-2 font-mono text-xs">
+                        <div className="flex items-center space-x-2">
+                          <span className="text-white">*</span>
+                          <span className="text-gray-400">MAIN.BRANCH</span>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <span className="text-white">+</span>
+                          <span className="text-gray-400">FEATURE.BRANCH</span>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <span className="text-white">o</span>
+                          <span className="text-gray-400">RELEASE.BRANCH</span>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <span className="text-gray-600">│</span>
+                          <span className="text-gray-400">CONNECTION.LINE</span>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}
 
-              {/* Users Tab */}
+              {/* Team Status Tab */}
               {activeTab === 'users' && (
                 <div className="space-y-6">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-lg font-medium text-gray-900">Project Contributors</h3>
-                    <div className="text-sm text-gray-500">
-                      {localUsers.length} local user{localUsers.length !== 1 ? 's' : ''}
+                  {/* Header */}
+                  <div className="flex items-center justify-between border-b border-gray-800 pb-4">
+                    <div>
+                      <h3 className="text-white font-mono text-lg">TEAM.STATUS.MONITOR</h3>
+                      <p className="text-gray-400 font-mono text-xs mt-1">REAL.TIME.DEVELOPER.TRACKING</p>
+                    </div>
+                    <div className="text-gray-400 font-mono text-xs border border-gray-700 px-3 py-1">
+                      {localUsers.length.toString().padStart(2, '0')} ACTIVE.USERS
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {localUsers.map((userLoc) => (
-                      <div key={userLoc.userId} className="bg-white border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow">
-                        <div className="flex items-center space-x-3 mb-4">
-                          <div className="w-12 h-12 bg-gradient-to-br from-blue-400 to-purple-500 rounded-full flex items-center justify-center text-white font-medium text-lg">
-                            {userLoc.userName.charAt(0).toUpperCase()}
-                          </div>
-                          <div>
-                            <div className="font-medium text-gray-900">{userLoc.userName}</div>
-                            <div className="text-sm text-gray-500">{userLoc.userEmail}</div>
+                  {/* Team Grid */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {localUsers.map((userLoc, index) => (
+                      <div key={userLoc.userId} className="border border-gray-800 bg-black">
+                        {/* User Header */}
+                        <div className="border-b border-gray-800 p-4 bg-gray-900">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center space-x-3">
+                              <div className="w-8 h-8 bg-white text-black font-mono font-bold text-sm flex items-center justify-center">
+                                {userLoc.userName.charAt(0).toUpperCase()}
+                              </div>
+                              <div>
+                                <div className="text-white font-mono text-sm font-bold">{userLoc.userName.toUpperCase()}</div>
+                                <div className="text-gray-400 font-mono text-xs">{userLoc.userEmail}</div>
+                              </div>
+                            </div>
+                            <div className="flex items-center space-x-2">
+                              <div className={`w-2 h-2 ${
+                                userLoc.status === 'online' ? 'bg-green-400' :
+                                userLoc.status === 'away' ? 'bg-yellow-400' : 'bg-gray-600'
+                              }`}></div>
+                              <span className="text-gray-400 font-mono text-xs">{userLoc.status.toUpperCase()}</span>
+                            </div>
                           </div>
                         </div>
 
-                        <div className="space-y-3">
-                          <div className="flex items-center justify-between text-sm">
-                            <span className="text-gray-500">Current Branch:</span>
-                            <span className="font-medium text-gray-900 bg-gray-100 px-2 py-1 rounded">
-                              {userLoc.currentBranch}
-                            </span>
+                        {/* User Details */}
+                        <div className="p-4 font-mono text-xs space-y-3">
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <div className="text-gray-400 mb-1">CURRENT.BRANCH</div>
+                              <div className="text-white border border-gray-700 px-2 py-1 bg-gray-900">
+                                {userLoc.currentBranch}
+                              </div>
+                            </div>
+                            <div>
+                              <div className="text-gray-400 mb-1">LAST.ACTIVITY</div>
+                              <div className="text-white">
+                                {userLoc.lastActivity ? formatTimeAgo(userLoc.lastActivity).toUpperCase() : 'UNKNOWN'}
+                              </div>
+                            </div>
                           </div>
 
-                          <div className="text-sm">
-                            <div className="text-gray-500 mb-1">Local Path:</div>
-                            <div className="font-mono text-xs bg-gray-50 p-2 rounded border break-all">
+                          {userLoc.commitsToday && (
+                            <div>
+                              <div className="text-gray-400 mb-1">TODAY.COMMITS</div>
+                              <div className="text-green-400 font-bold">{userLoc.commitsToday.toString().padStart(2, '0')}</div>
+                            </div>
+                          )}
+
+                          <div>
+                            <div className="text-gray-400 mb-1">LOCAL.WORKSPACE</div>
+                            <div className="text-green-400 bg-gray-900 p-2 border border-gray-700 break-all">
                               {userLoc.localPath}
                             </div>
                           </div>
 
-                          {userLoc.lastActivity && (
-                            <div className="flex items-center justify-between text-sm">
-                              <span className="text-gray-500">Last Activity:</span>
-                              <span className="text-gray-700">{formatTimeAgo(userLoc.lastActivity)}</span>
-                            </div>
-                          )}
-
-                          <div className="pt-3 border-t border-gray-100">
-                            <div className="flex items-center space-x-2">
-                              <div className="w-2 h-2 bg-green-400 rounded-full"></div>
-                              <span className="text-xs text-gray-500">Active</span>
+                          {/* Activity Indicator */}
+                          <div className="border-t border-gray-800 pt-3 mt-3">
+                            <div className="flex items-center justify-between">
+                              <span className="text-gray-400">ACTIVITY.LEVEL</span>
+                              <div className="flex space-x-1">
+                                {Array.from({ length: 5 }).map((_, i) => (
+                                  <div
+                                    key={i}
+                                    className={`w-2 h-4 ${
+                                      i < (userLoc.commitsToday || 0) ? 'bg-green-400' : 'bg-gray-700'
+                                    }`}
+                                  ></div>
+                                ))}
+                              </div>
                             </div>
                           </div>
                         </div>
@@ -572,11 +917,43 @@ export function RepoVisualizationModal({ isOpen, onClose, project }: RepoVisuali
                     ))}
                   </div>
 
+                  {/* System Status */}
+                  <div className="border border-gray-800 bg-black">
+                    <div className="border-b border-gray-800 p-4 bg-gray-900">
+                      <h4 className="text-white font-mono text-sm">SYSTEM.STATUS</h4>
+                    </div>
+                    <div className="p-4 font-mono text-xs">
+                      <div className="grid grid-cols-4 gap-4">
+                        <div>
+                          <div className="text-gray-400 mb-1">TOTAL.USERS</div>
+                          <div className="text-white text-lg font-bold">{localUsers.length.toString().padStart(2, '0')}</div>
+                        </div>
+                        <div>
+                          <div className="text-gray-400 mb-1">ONLINE.NOW</div>
+                          <div className="text-green-400 text-lg font-bold">
+                            {localUsers.filter(u => u.status === 'online').length.toString().padStart(2, '0')}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-gray-400 mb-1">AWAY.STATUS</div>
+                          <div className="text-yellow-400 text-lg font-bold">
+                            {localUsers.filter(u => u.status === 'away').length.toString().padStart(2, '0')}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-gray-400 mb-1">TOTAL.COMMITS</div>
+                          <div className="text-white text-lg font-bold">
+                            {localUsers.reduce((sum, u) => sum + (u.commitsToday || 0), 0).toString().padStart(2, '0')}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
                   {localUsers.length === 0 && (
-                    <div className="text-center py-12">
-                      <div className="text-gray-400 text-4xl mb-4">👥</div>
-                      <h3 className="text-lg font-medium text-gray-900 mb-2">No Local Users</h3>
-                      <p className="text-gray-500">No team members have connected their local repositories yet.</p>
+                    <div className="text-center py-12 border border-gray-800 bg-black">
+                      <div className="text-gray-600 font-mono text-4xl mb-4">[ NO.USERS.DETECTED ]</div>
+                      <div className="text-gray-400 font-mono text-sm">NO.TEAM.MEMBERS.CONNECTED.TO.LOCAL.REPOSITORIES</div>
                     </div>
                   )}
                 </div>
