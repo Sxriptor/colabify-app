@@ -150,11 +150,13 @@ ipcMain.handle('auth:start-sign-in', async () => {
       mainWindow.webContents.send('auth-success', eventData);
       console.log('✅ Event sent successfully');
 
-      // Also execute console.log in the renderer to verify it's alive
-      mainWindow.webContents.executeJavaScript(`
-        console.log('🎯 MAIN PROCESS: Auth success event sent!');
-        console.log('🎯 MAIN PROCESS: User:', ${JSON.stringify(JSON.stringify(authResult.user))});
-      `).catch(err => console.error('Failed to execute JS in renderer:', err));
+      // Reload the window to pick up the new auth state
+      console.log('🔄 Reloading window to apply auth state...');
+      setTimeout(() => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.reload();
+        }
+      }, 500);
     } else {
       console.error('⚠️ mainWindow is null or destroyed, cannot send event');
     }

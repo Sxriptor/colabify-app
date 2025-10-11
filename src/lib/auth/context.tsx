@@ -32,10 +32,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isElectron, setIsElectron] = useState(false)
   const supabase = createClient()
 
-  // Check if we're in Electron on mount
-  useEffect(() => {
-    setIsElectron(typeof window !== 'undefined' && (window as any).electronAPI?.isElectron === true)
-  }, [])
+  // Check if we're in Electron immediately (synchronous)
+  const checkIsElectron = () => {
+    return typeof window !== 'undefined' && (window as any).electronAPI?.isElectron === true
+  }
 
   const ensureCustomUserExists = useCallback(async (authUser: User) => {
     try {
@@ -92,8 +92,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const getInitialSession = async () => {
       try {
         console.log('🔄 Getting initial session...')
-        
-        if (isElectron) {
+        const isElectronEnv = checkIsElectron()
+        setIsElectron(isElectronEnv)
+        console.log('🔍 Is Electron environment:', isElectronEnv)
+
+        if (isElectronEnv) {
           // For Electron, use the Electron API to check auth
           console.log('🖥️ Electron detected, checking auth via Electron API...')
           const electronAPI = (window as any).electronAPI
@@ -139,7 +142,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     getInitialSession()
-  }, [isElectron, supabase.auth, ensureCustomUserExists, convertElectronUserToSupabaseUser])
+  }, [supabase.auth, ensureCustomUserExists, convertElectronUserToSupabaseUser])
 
   // Set up auth event listeners
   useEffect(() => {
