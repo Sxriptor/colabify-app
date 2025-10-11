@@ -394,7 +394,12 @@ class AuthManager {
       throw new Error('Not authenticated');
     }
 
-    const response = await fetch(`https://colabify.xyz/api${endpoint}`, {
+    // Use localhost in development
+    const baseUrl = process.env.NODE_ENV === 'production'
+      ? 'https://colabify.xyz'
+      : 'http://localhost:3000';
+
+    const response = await fetch(`${baseUrl}/api${endpoint}`, {
       ...options,
       headers: {
         'Authorization': `Bearer ${stored.token}`,

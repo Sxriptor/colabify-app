@@ -189,6 +189,16 @@ ipcMain.handle('auth:is-authenticated', async () => {
   return await authManager.isAuthenticated();
 });
 
+ipcMain.handle('auth:get-token', async () => {
+  try {
+    const stored = await authManager.getStoredToken();
+    return stored?.token || null;
+  } catch (error) {
+    console.error('Error getting token:', error);
+    return null;
+  }
+});
+
 ipcMain.handle('auth:logout', async () => {
   try {
     await authManager.signOut();

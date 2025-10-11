@@ -21,6 +21,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   logout: () => ipcRenderer.invoke('auth:logout'),
   getUser: () => ipcRenderer.invoke('auth:get-user'),
   isAuthenticated: () => ipcRenderer.invoke('auth:is-authenticated'),
+  getToken: () => ipcRenderer.invoke('auth:get-token'),
 
   // Auth event listeners
   onAuthSuccess: (callback) => {

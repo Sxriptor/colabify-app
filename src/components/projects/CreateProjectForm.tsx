@@ -22,20 +22,46 @@ export function CreateProjectForm({ onSuccess, onCancel }: CreateProjectFormProp
     setError(null)
 
     try {
-      const electronAPI = (window as any).electronAPI
-      const data = await electronAPI.apiCall('/projects', {
-        method: 'POST',
-        body: JSON.stringify({
-          name,
-          description,
-          visibility,
-        }),
-      })
+      // Import dynamically to avoid SSR issues
+      const { createElectronClient } = await import('@/lib/supabase/electron-client')
+      const supabase = await createElectronClient()
+
+      // Get current user
+      const { data: { user: authUser } } = await supabase.auth.getUser()
+      if (!authUser) throw new Error('Not authenticated')
+
+      // Create project
+      const { data: project, error: projectError } = await supabase
+        .from('projects')
+        .insert({
+          name: name.trim(),
+          description: description?.trim() || null,
+          visibility: visibility || 'private',
+          owner_id: authUser.id,
+        })
+        .select(`
+          *,
+          owner:users!projects_owner_id_fkey(id, name, email, avatar_url)
+        `)
+        .single()
+
+      if (projectError) throw projectError
+
+      // Add owner as project member
+      await supabase
+        .from('project_members')
+        .insert({
+          project_id: project.id,
+          user_id: authUser.id,
+          role: 'owner',
+          status: 'active',
+          joined_at: new Date().toISOString(),
+        })
 
       if (onSuccess) {
-        onSuccess(data.project)
+        onSuccess(project)
       } else {
-        router.push(`/projects/${data.project.id}`)
+        router.push(`/projects/${project.id}`)
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred')

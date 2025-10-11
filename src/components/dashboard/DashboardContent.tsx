@@ -18,9 +18,27 @@ export function DashboardContent() {
 
   const fetchProjects = async () => {
     try {
-      const electronAPI = (window as any).electronAPI
-      const data = await electronAPI.apiCall('/projects')
-      setProjects(data.projects)
+      // Import dynamically to avoid SSR issues
+      const { createElectronClient } = await import('@/lib/supabase/electron-client')
+      const supabase = await createElectronClient()
+
+      const { data, error } = await supabase
+        .from('projects')
+        .select(`
+          *,
+          owner:users!projects_owner_id_fkey(id, name, email, avatar_url),
+          repositories(id, name, full_name, url),
+          members:project_members(
+            id,
+            role,
+            status,
+            user:users(id, name, email, avatar_url)
+          )
+        `)
+        .order('created_at', { ascending: false })
+
+      if (error) throw error
+      setProjects(data || [])
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred')
     } finally {
