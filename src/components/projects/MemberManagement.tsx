@@ -45,15 +45,42 @@ export function MemberManagement({ projectId, canManage }: MemberManagementProps
 
   const fetchMembersAndInvitations = async () => {
     try {
-      const response = await fetch(`/api/projects/${projectId}/members`)
-      const data = await response.json()
+      const { createElectronClient } = await import('@/lib/supabase/electron-client')
+      const supabase = await createElectronClient()
 
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to fetch members')
-      }
+      // Fetch members
+      const { data: membersData, error: membersError } = await supabase
+        .from('project_members')
+        .select(`
+          id,
+          role,
+          status,
+          joined_at,
+          invited_at,
+          user:users(id, name, email, avatar_url)
+        `)
+        .eq('project_id', projectId)
 
-      setMembers(data.members || [])
-      setInvitations(data.invitations || [])
+      if (membersError) throw membersError
+
+      // Fetch invitations
+      const { data: invitationsData, error: invitationsError } = await supabase
+        .from('project_invitations')
+        .select(`
+          id,
+          email,
+          status,
+          expires_at,
+          created_at,
+          inviter:users!project_invitations_invited_by_fkey(name, email)
+        `)
+        .eq('project_id', projectId)
+        .eq('status', 'pending')
+
+      if (invitationsError) throw invitationsError
+
+      setMembers(membersData || [])
+      setInvitations(invitationsData || [])
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred')
     } finally {
@@ -67,15 +94,15 @@ export function MemberManagement({ projectId, canManage }: MemberManagementProps
     }
 
     try {
-      const response = await fetch(`/api/projects/${projectId}/members?memberId=${memberId}`, {
-        method: 'DELETE',
-      })
+      const { createElectronClient } = await import('@/lib/supabase/electron-client')
+      const supabase = await createElectronClient()
 
-      const data = await response.json()
+      const { error } = await supabase
+        .from('project_members')
+        .delete()
+        .eq('id', memberId)
 
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to remove member')
-      }
+      if (error) throw error
 
       // Refresh the list
       fetchMembersAndInvitations()
@@ -90,15 +117,15 @@ export function MemberManagement({ projectId, canManage }: MemberManagementProps
     }
 
     try {
-      const response = await fetch(`/api/projects/${projectId}/members?invitationId=${invitationId}`, {
-        method: 'DELETE',
-      })
+      const { createElectronClient } = await import('@/lib/supabase/electron-client')
+      const supabase = await createElectronClient()
 
-      const data = await response.json()
+      const { error } = await supabase
+        .from('project_invitations')
+        .update({ status: 'cancelled' })
+        .eq('id', invitationId)
 
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to cancel invitation')
-      }
+      if (error) throw error
 
       // Refresh the list
       fetchMembersAndInvitations()

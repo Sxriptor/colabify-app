@@ -57,21 +57,27 @@ export function InviteModal({ isOpen, onClose, projectId, onInviteSuccess }: Inv
     }
 
     try {
-      const response = await fetch(`/api/projects/${projectId}/invite`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          emails: validEmails.map(email => email.trim())
-        }),
-      })
+      const { createElectronClient } = await import('@/lib/supabase/electron-client')
+      const supabase = await createElectronClient()
 
-      const data = await response.json()
+      // Get current user
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) throw new Error('Not authenticated')
 
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to send invitations')
-      }
+      // Create invitations for each email
+      const invitations = validEmails.map(email => ({
+        project_id: projectId,
+        email: email.trim(),
+        invited_by: user.id,
+        status: 'pending',
+        expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), // 7 days
+      }))
+
+      const { error } = await supabase
+        .from('project_invitations')
+        .insert(invitations)
+
+      if (error) throw error
 
       onInviteSuccess()
       onClose()
