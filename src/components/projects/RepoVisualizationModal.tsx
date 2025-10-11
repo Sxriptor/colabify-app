@@ -187,6 +187,7 @@ export function RepoVisualizationModal({ isOpen, onClose, project }: RepoVisuali
 
       // Use real data if available, otherwise fall back to mock
       if (allBranches.length > 0) {
+        console.log('📊 All branches data:', allBranches)
         setBranches(allBranches)
         setDataSource('backend')
         console.log(`✅ Using real Git data from ${allBranches.length} stored repositories`)
@@ -197,27 +198,29 @@ export function RepoVisualizationModal({ isOpen, onClose, project }: RepoVisuali
 
         const realUsers = await generateUsersFromRealData(allBranches)
         setLocalUsers(realUsers)
+
+        // Don't fetch GitHub branches - we already have local repository data
       } else {
         console.log(`⚠️ No Git data could be read, falling back to mock data`)
         await fetchMockBranches()
         await fetchMockCommits()
         await fetchMockUsers()
         setDataSource('mock')
-      }
 
-      // Also try to fetch from GitHub API as supplementary data
-      if (project.repositories?.[0]?.url) {
-        try {
-          const repo = project.repositories[0]
-          const urlParts = repo.url.replace('https://github.com/', '').split('/')
-          const owner = urlParts[0]
-          const repoName = urlParts[1]?.replace(/\.git$/, '') // Remove .git suffix
+        // Only try to fetch from GitHub API if we're using mock data
+        if (project.repositories?.[0]?.url) {
+          try {
+            const repo = project.repositories[0]
+            const urlParts = repo.url.replace('https://github.com/', '').split('/')
+            const owner = urlParts[0]
+            const repoName = urlParts[1]?.replace(/\.git$/, '') // Remove .git suffix
 
-          if (owner && repoName) {
-            await fetchGitHubBranches(owner, repoName)
+            if (owner && repoName) {
+              await fetchGitHubBranches(owner, repoName)
+            }
+          } catch (githubError) {
+            console.log('GitHub API not available, using backend data only')
           }
-        } catch (githubError) {
-          console.log('GitHub API not available, using backend data only')
         }
       }
 
@@ -737,6 +740,7 @@ export function RepoVisualizationModal({ isOpen, onClose, project }: RepoVisuali
           behind: repoState?.behind || 0,
           localBranches: repoState?.localBranches || ['main'],
           remoteBranches: repoState?.remoteBranches || [],
+          remoteUrls: repoState?.remoteUrls || {},
           lastChecked: repoState?.lastChecked || new Date().toISOString(),
           commit: {
             sha: repoState?.head || 'unknown',
@@ -840,30 +844,31 @@ export function RepoVisualizationModal({ isOpen, onClose, project }: RepoVisuali
     return users
   }
 
-  const getRepositoryInfo = (repoConfig: any) => {
-    let ownerName = 'local'
-    let repoName = 'unknown'
+  // Get local repository info - uses local folder name
+  const getLocalRepositoryInfo = (repoConfig: any) => {
+    console.log('🔍 getLocalRepositoryInfo called with:', repoConfig)
 
-    // First, try to extract from the Git remote URLs (most accurate)
+    // Extract the local folder name from the file path
+    const pathToUse = repoConfig.path || ''
+    console.log('📂 Path to use:', pathToUse)
+
+    const folderName = pathToUse.split('/').pop() || pathToUse.split('\\').pop() || 'Unknown'
+    console.log('📁 Extracted folder name:', folderName)
+
+    // Extract owner from Git remote URLs
+    let ownerName = 'local'
     if (repoConfig.remoteUrls) {
-      // Try 'origin' first, then any other remote
       const originUrl = repoConfig.remoteUrls.origin || Object.values(repoConfig.remoteUrls)[0]
       if (originUrl) {
         try {
-          // Parse GitHub URL from Git remote
           let cleanUrl = originUrl as string
-
-          // Handle SSH format: git@github.com:owner/repo.git
           if (cleanUrl.startsWith('git@github.com:')) {
             cleanUrl = cleanUrl.replace('git@github.com:', 'https://github.com/')
           }
-
-          // Handle HTTPS format: https://github.com/owner/repo.git
           if (cleanUrl.includes('github.com')) {
             const match = cleanUrl.match(/github\.com[\/:]([^\/]+)\/([^\/]+?)(?:\.git)?(?:\/)?$/)
             if (match) {
-              ownerName = match[1] // e.g., "sxriptor"
-              repoName = match[2]  // e.g., "plei-clone"
+              ownerName = match[1]
             }
           }
         } catch (error) {
@@ -872,7 +877,57 @@ export function RepoVisualizationModal({ isOpen, onClose, project }: RepoVisuali
       }
     }
 
-    // Fallback to project remote URL if Git remote parsing failed
+    // Fallback to project remote URL for owner
+    if (ownerName === 'local') {
+      const projectRemoteUrl = project?.repositories?.[0]?.url
+      if (projectRemoteUrl) {
+        try {
+          const urlParts = projectRemoteUrl.replace('https://github.com/', '').replace('.git', '').split('/')
+          if (urlParts.length >= 2) {
+            ownerName = urlParts[0]
+          }
+        } catch (error) {
+          console.warn('Failed to parse project remote URL:', projectRemoteUrl)
+        }
+      }
+    }
+
+    return {
+      name: folderName,
+      owner: ownerName,
+      avatarUrl: `https://github.com/${ownerName}.png`,
+      fullPath: pathToUse
+    }
+  }
+
+  // Get remote repository info - uses GitHub repo name
+  const getRemoteRepositoryInfo = (repoConfig: any) => {
+    let ownerName = 'local'
+    let repoName = 'unknown'
+
+    // Extract from Git remote URLs
+    if (repoConfig.remoteUrls) {
+      const originUrl = repoConfig.remoteUrls.origin || Object.values(repoConfig.remoteUrls)[0]
+      if (originUrl) {
+        try {
+          let cleanUrl = originUrl as string
+          if (cleanUrl.startsWith('git@github.com:')) {
+            cleanUrl = cleanUrl.replace('git@github.com:', 'https://github.com/')
+          }
+          if (cleanUrl.includes('github.com')) {
+            const match = cleanUrl.match(/github\.com[\/:]([^\/]+)\/([^\/]+?)(?:\.git)?(?:\/)?$/)
+            if (match) {
+              ownerName = match[1]
+              repoName = match[2]
+            }
+          }
+        } catch (error) {
+          console.warn('Failed to parse Git remote URL:', originUrl, error)
+        }
+      }
+    }
+
+    // Fallback to project remote URL
     if (repoName === 'unknown') {
       const projectRemoteUrl = project?.repositories?.[0]?.url
       if (projectRemoteUrl) {
@@ -888,19 +943,11 @@ export function RepoVisualizationModal({ isOpen, onClose, project }: RepoVisuali
       }
     }
 
-    // Final fallback to local directory name
-    if (repoName === 'unknown') {
-      repoName = repoConfig.path ? repoConfig.path.split('/').pop() || repoConfig.path.split('\\').pop() : 'Unknown'
-    }
-
-    // Generate GitHub avatar URL for the owner
-    const avatarUrl = `https://github.com/${ownerName}.png`
-
     return {
       name: repoName,
       owner: ownerName,
-      avatarUrl: avatarUrl,
-      fullPath: repoConfig.path
+      avatarUrl: `https://github.com/${ownerName}.png`,
+      fullPath: repoConfig.path || ''
     }
   }
 
@@ -971,12 +1018,26 @@ export function RepoVisualizationModal({ isOpen, onClose, project }: RepoVisuali
           </nav>
 
           {/* Local Repository Sub-tabs */}
-          {activeTab === 'local' && branches.length > 0 && (
+          {activeTab === 'local' && project.repositories?.[0]?.local_mappings?.length > 0 && (
             <div className="bg-gray-950 border-b border-gray-800">
               <nav className="flex px-6 overflow-x-auto">
-                {branches.map((repoConfig, index) => {
+                {project.repositories[0].local_mappings.map((mapping: any, index: number) => {
                   const repoId = `repo-${index}`;
-                  const repoInfo = getRepositoryInfo(repoConfig);
+                  // Extract folder name directly from the stored path
+                  const folderName = mapping.local_path.split('/').pop() || mapping.local_path.split('\\').pop() || 'Unknown';
+                  // Extract owner from project remote URL
+                  const projectRemoteUrl = project.repositories?.[0]?.url || '';
+                  let ownerName = 'local';
+                  if (projectRemoteUrl) {
+                    try {
+                      const urlParts = projectRemoteUrl.replace('https://github.com/', '').replace('.git', '').split('/');
+                      if (urlParts.length >= 2) {
+                        ownerName = urlParts[0];
+                      }
+                    } catch (error) {
+                      console.warn('Failed to parse project remote URL:', projectRemoteUrl);
+                    }
+                  }
                   const isActive = activeLocalRepo === repoId || (activeLocalRepo === '' && index === 0);
 
                   return (
@@ -990,8 +1051,8 @@ export function RepoVisualizationModal({ isOpen, onClose, project }: RepoVisuali
                     >
                       {/* Owner Avatar */}
                       <img
-                        src={repoInfo.avatarUrl}
-                        alt={repoInfo.owner}
+                        src={`https://github.com/${ownerName}.png`}
+                        alt={ownerName}
                         className="w-4 h-4 rounded-sm"
                         onError={(e) => {
                           // Fallback to initials if image fails
@@ -1001,12 +1062,12 @@ export function RepoVisualizationModal({ isOpen, onClose, project }: RepoVisuali
 
                       {/* Repository Name */}
                       <span className="truncate max-w-32">
-                        {repoInfo.name.toUpperCase()}
+                        {folderName.toUpperCase()}
                       </span>
 
                       {/* Owner Name */}
                       <span className="text-gray-500 text-xs">
-                        @{repoInfo.owner.toLowerCase()}
+                        @{ownerName.toLowerCase()}
                       </span>
 
                       {isActive && (
@@ -1053,7 +1114,7 @@ export function RepoVisualizationModal({ isOpen, onClose, project }: RepoVisuali
                         {branches.length > 0 && (() => {
                           const activeIndex = activeLocalRepo ? parseInt(activeLocalRepo.split('-')[1]) : 0;
                           const activeRepo = branches[activeIndex];
-                          const repoInfo = getRepositoryInfo(activeRepo);
+                          const repoInfo = getLocalRepositoryInfo(activeRepo);
 
                           return (
                             <>
