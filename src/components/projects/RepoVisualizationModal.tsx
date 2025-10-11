@@ -224,9 +224,11 @@ export function RepoVisualizationModal({ isOpen, onClose, project }: RepoVisuali
           const repo = project.repositories[0]
           const urlParts = repo.url.replace('https://github.com/', '').split('/')
           const owner = urlParts[0]
-          const repoName = urlParts[1]
+          const repoName = urlParts[1]?.replace(/\.git$/, '') // Remove .git suffix
           
-          await fetchGitHubBranches(owner, repoName)
+          if (owner && repoName) {
+            await fetchGitHubBranches(owner, repoName)
+          }
         } catch (githubError) {
           console.log('GitHub API not available, using backend data only')
         }
