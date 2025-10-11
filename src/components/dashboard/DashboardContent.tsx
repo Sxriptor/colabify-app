@@ -81,6 +81,17 @@ export function DashboardContent() {
         if (error) throw error
       }
 
+      // Notify Git monitoring backend about watch state change
+      try {
+        if (typeof window !== 'undefined' && (window as any).electronAPI) {
+          console.log(`🔄 Notifying Git backend: ${!isWatching ? 'start' : 'stop'} watching project ${projectId}`)
+          await (window as any).electronAPI.invoke('git:watchProject', projectId, !isWatching)
+        }
+      } catch (gitError) {
+        console.warn('Git monitoring notification failed:', gitError)
+        // Don't fail the whole operation if Git monitoring fails
+      }
+
       // Update local state
       setProjects(prev => prev.map(project => {
         if (project.id === projectId) {
