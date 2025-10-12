@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { LiveActivityPanel } from './LiveActivityPanel'
 import { useGitMonitoring } from '@/hooks/useGitMonitoring'
+import { useAuth } from '@/lib/auth/context'
 
 interface RecentActivityTabsProps {
   project: any
@@ -12,7 +13,13 @@ type ActivityTab = 'user' | 'local' | 'remote'
 
 export function RecentActivityTabs({ project }: RecentActivityTabsProps) {
   const [activeTab, setActiveTab] = useState<ActivityTab>('user')
-  const { isProjectWatched, toggleProjectWatch } = useGitMonitoring()
+  const { user } = useAuth()
+  const { status, isElectron } = useGitMonitoring()
+  
+  // Check if project is being watched (from database or Electron backend)
+  const isWatchingInDatabase = project?.watches?.some((watch: any) => watch.user_id === user?.id) || false
+  const isWatchingInBackend = isElectron ? status.watchedProjects.includes(project.id) : false
+  const isWatching = isWatchingInDatabase || isWatchingInBackend
 
   const tabs = [
     { id: 'user', label: 'User Activity', icon: '👥' },
@@ -26,8 +33,6 @@ export function RecentActivityTabs({ project }: RecentActivityTabsProps) {
         return (
           <LiveActivityPanel
             project={project}
-            isWatching={isProjectWatched(project.id)}
-            onToggleWatch={(watching) => toggleProjectWatch(project.id, watching)}
           />
         )
       
@@ -99,7 +104,7 @@ export function RecentActivityTabs({ project }: RecentActivityTabsProps) {
               >
                 <span className="text-lg">{tab.icon}</span>
                 <span>{tab.label}</span>
-                {tab.id === 'user' && isProjectWatched(project.id) && (
+                {tab.id === 'user' && isWatching && (
                   <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
                 )}
               </button>

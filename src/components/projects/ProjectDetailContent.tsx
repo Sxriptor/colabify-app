@@ -63,12 +63,17 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
             status,
             created_at,
             expires_at
+          ),
+          watches:project_watches!project_watches_project_id_fkey(
+            id,
+            user_id
           )
         `)
         .eq('id', projectId)
         .single()
 
       if (error) throw error
+      console.log('Project data loaded:', data)
       setProject(data)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred')

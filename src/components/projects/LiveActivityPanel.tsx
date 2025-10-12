@@ -30,17 +30,13 @@ interface TeamMember {
 
 interface LiveActivityPanelProps {
   project: any
-  isWatching: boolean
-  onToggleWatch: (watching: boolean) => void
 }
 
-export function LiveActivityPanel({ project, isWatching, onToggleWatch }: LiveActivityPanelProps) {
+export function LiveActivityPanel({ project }: LiveActivityPanelProps) {
   const { user } = useAuth()
   const { 
     status, 
-    loading: gitLoading, 
     isElectron,
-    toggleProjectWatch,
     getTeamAwareness,
     getRecentActivities 
   } = useGitMonitoring()
@@ -49,32 +45,56 @@ export function LiveActivityPanel({ project, isWatching, onToggleWatch }: LiveAc
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([])
   const [loading, setLoading] = useState(false)
 
-  // Use real watching status from Git monitoring backend
-  const realIsWatching = isElectron ? status.watchedProjects.includes(project.id) : isWatching
+  // Check if project is being watched (from database or Electron backend)
+  const isWatchingInDatabase = project?.watches?.some((watch: any) => watch.user_id === user?.id) || false
+  const isWatchingInBackend = isElectron ? status.watchedProjects.includes(project.id) : false
+  const isWatching = isWatchingInDatabase || isWatchingInBackend
+
+  // Debug logging
+  useEffect(() => {
+    console.log('LiveActivityPanel Debug:', {
+      projectId: project.id,
+      userId: user?.id,
+      watches: project?.watches,
+      watchesDetails: project?.watches?.map((w: any) => ({ 
+        id: w.id, 
+        user_id: w.user_id, 
+        matches: w.user_id === user?.id 
+      })),
+      isWatchingInDatabase,
+      isWatchingInBackend,
+      isWatching,
+      isElectron,
+      backendStatus: status
+    })
+  }, [project.id, user?.id, project?.watches, isWatchingInDatabase, isWatchingInBackend, isWatching, isElectron, status])
 
   // Fetch real data when watching or use mock data
   useEffect(() => {
     const fetchData = async () => {
-      if (realIsWatching && isElectron && status.isRunning) {
-        setLoading(true)
-        try {
-          const [teamData, activityData] = await Promise.all([
-            getTeamAwareness(project.id),
-            getRecentActivities(project.id, 20)
-          ])
-          
-          setTeamMembers(teamData)
-          setActivities(activityData)
-        } catch (error) {
-          console.error('Failed to fetch live data:', error)
-          // Fall back to mock data
+      if (isWatching) {
+        if (isElectron && status.isRunning && isWatchingInBackend) {
+          // Use real data from Electron backend
+          setLoading(true)
+          try {
+            const [teamData, activityData] = await Promise.all([
+              getTeamAwareness(project.id),
+              getRecentActivities(project.id, 20)
+            ])
+            
+            setTeamMembers(teamData)
+            setActivities(activityData)
+          } catch (error) {
+            console.error('Failed to fetch live data:', error)
+            // Fall back to mock data
+            loadMockData()
+          } finally {
+            setLoading(false)
+          }
+        } else {
+          // Use mock data when watching but backend not available
           loadMockData()
-        } finally {
-          setLoading(false)
         }
-      } else if (realIsWatching) {
-        // Use mock data when not in Electron or backend not running
-        loadMockData()
       } else {
         setActivities([])
         setTeamMembers([])
@@ -152,20 +172,9 @@ export function LiveActivityPanel({ project, isWatching, onToggleWatch }: LiveAc
     }
 
     fetchData()
-  }, [realIsWatching, user, isElectron, status.isRunning, project.id, getTeamAwareness, getRecentActivities])
+  }, [isWatching, user, isElectron, status.isRunning, project.id, getTeamAwareness, getRecentActivities])
 
-  // Handle toggle watch
-  const handleToggleWatch = async (watching: boolean) => {
-    if (isElectron && status.isRunning) {
-      const result = await toggleProjectWatch(project.id, watching)
-      if (!result.success) {
-        console.error('Failed to toggle project watch:', result.error)
-      }
-    } else {
-      // Fall back to parent handler for non-Electron environments
-      onToggleWatch(watching)
-    }
-  }
+
 
   const getActivityIcon = (activityType: string) => {
     switch (activityType) {
@@ -237,27 +246,22 @@ export function LiveActivityPanel({ project, isWatching, onToggleWatch }: LiveAc
               Real-time developer activity and team awareness
             </p>
           </div>
-          <button
-            onClick={() => handleToggleWatch(!realIsWatching)}
-            disabled={gitLoading}
-            className={`px-4 py-2 text-xs font-medium rounded-md transition-all duration-200 disabled:opacity-50 ${
-              realIsWatching
-                ? 'bg-green-100 text-green-800 border border-green-300 hover:bg-green-200'
-                : 'bg-gray-100 text-gray-700 border border-gray-300 hover:bg-gray-200'
-            }`}
-          >
-            {gitLoading ? '⏳ Loading...' : realIsWatching ? '👁️ Watching' : '👀 Start Watching'}
-          </button>
+          {isWatching && (
+            <div className="flex items-center space-x-2 text-xs text-green-600">
+              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+              <span>Monitoring Active</span>
+            </div>
+          )}
         </div>
       </div>
 
-      {!realIsWatching ? (
+      {!isWatching ? (
         <div className="p-6 text-center">
           <div className="text-gray-500 text-sm mb-4">
-            Monitoring Disabled
+            Project Monitoring Disabled
           </div>
           <p className="text-gray-400 text-xs">
-            Enable watching to see live team activity and file changes
+            Enable watching on the project card to see live team activity and file changes
           </p>
         </div>
       ) : (
