@@ -13,6 +13,15 @@ export function FloatingActionMenu() {
   const [currentProject, setCurrentProject] = useState<any>(null)
   const [unreadInboxCount, setUnreadInboxCount] = useState(0)
 
+  // Check if we're on the dashboard
+  const isDashboard = pathname === '/dashboard' || pathname === '/dashboard/'
+
+  // Debug logging
+  useEffect(() => {
+    console.log('FloatingActionMenu - pathname:', pathname)
+    console.log('FloatingActionMenu - isDashboard:', isDashboard)
+  }, [pathname, isDashboard])
+
   // Check if we're on a project page and fetch project data
   useEffect(() => {
     const projectMatch = pathname?.match(/^\/projects\/([^\/]+)/)
@@ -91,7 +100,7 @@ export function FloatingActionMenu() {
           .select('project_id')
           .eq('user_id', user!.id)
           .eq('status', 'active')
-        })`)
+          })`)
 
       let notificationCount = 0
       if (!projectsError && userProjects && userProjects.length > 0) {
@@ -135,6 +144,19 @@ export function FloatingActionMenu() {
     <>
       <div className="fixed bottom-6 right-6 z-50">
         <div className="bg-gray-800 rounded-lg shadow-lg p-2 flex flex-col gap-1">
+          {/* Back to Dashboard Button - Show on all pages except dashboard */}
+          {!isDashboard && (
+            <button
+              onClick={() => router.push('/dashboard')}
+              className="text-white hover:bg-gray-700 transition-colors duration-200 rounded p-3"
+              title="Back to Dashboard"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+              </svg>
+            </button>
+          )}
+
           {/* Repository Visualization Button - Only show on project pages with repositories */}
           {currentProject && currentProject.repositories?.length > 0 && (
             <button
@@ -165,39 +187,39 @@ export function FloatingActionMenu() {
             )}
           </button>
 
-        {/* Settings Button */}
-        <button
-          onClick={handleSettingsClick}
-          className="text-white hover:bg-gray-700 transition-colors duration-200 rounded p-3"
-          title="Settings"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-          </svg>
-        </button>
+          {/* Settings Button */}
+          <button
+            onClick={handleSettingsClick}
+            className="text-white hover:bg-gray-700 transition-colors duration-200 rounded p-3"
+            title="Settings"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+          </button>
 
-        {/* Sign Out Button */}
-        <button
-          onClick={signOut}
-          className="text-white hover:bg-gray-700 transition-colors duration-200 rounded p-3"
-          title="Sign Out"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-          </svg>
-        </button>
+          {/* Sign Out Button */}
+          <button
+            onClick={signOut}
+            className="text-white hover:bg-gray-700 transition-colors duration-200 rounded p-3"
+            title="Sign Out"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+            </svg>
+          </button>
+        </div>
       </div>
-    </div>
 
-    {/* Repository Visualization Modal */}
-    {currentProject && (
-      <RepoVisualizationModal
-        isOpen={showRepoVisualization}
-        onClose={() => setShowRepoVisualization(false)}
-        project={currentProject}
-      />
-    )}
-  </>
+      {/* Repository Visualization Modal */}
+      {currentProject && (
+        <RepoVisualizationModal
+          isOpen={showRepoVisualization}
+          onClose={() => setShowRepoVisualization(false)}
+          project={currentProject}
+        />
+      )}
+    </>
   )
 }
