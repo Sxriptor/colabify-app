@@ -242,20 +242,20 @@ export function CommitHistoryGraph({ commits, branches = [] }: CommitHistoryGrap
     })
 
     // Node interactions with smooth animations
-    node.on('click', (event, d) => {
+    node.on('click', (event, d: CommitNode) => {
       setSelectedCommit(d)
       
       // Pulse effect on click
+      const activity = (d.additions || 0) + (d.deletions || 0)
       d3.select(event.currentTarget)
         .select('circle:nth-child(2)')
         .transition()
         .duration(300)
-        .attr('r', d => {
-          const activity = (d.additions || 0) + (d.deletions || 0)
-          return activity > 100 ? 16 : activity > 50 ? 14 : 12
-        })
+        .attr('r', activity > 100 ? 16 : activity > 50 ? 14 : 12)
         .transition()
         .duration(300)
+        .attr('r', activity > 100 ? 12 : activity > 50 ? 10 : 8)
+    })  .duration(300)
         .attr('r', d => {
           const activity = (d.additions || 0) + (d.deletions || 0)
           return activity > 100 ? 12 : activity > 50 ? 10 : 8
