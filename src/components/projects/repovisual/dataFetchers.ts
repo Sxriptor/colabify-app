@@ -1,5 +1,31 @@
 import { GitHubBranch, GitHubCommit, LocalUserLocation, GitHubDataSource } from './types'
 
+export const readCompleteGitHistory = async (localPath: string) => {
+  try {
+    console.log(`📚 Reading complete Git history from: ${localPath}`)
+
+    const electronAPI = (window as any).electronAPI
+    if (electronAPI && electronAPI.git && electronAPI.git.readCompleteHistory) {
+      const history = await electronAPI.git.readCompleteHistory(localPath, {
+        maxCommits: 1000,
+        includeBranches: true,
+        includeRemotes: true,
+        includeStats: true
+      })
+      
+      console.log(`✅ Read complete history: ${history.commits.length} commits, ${history.branches.length} branches`)
+      return history
+    }
+
+    console.warn(`⚠️ Complete history method not available, falling back to basic state`)
+    return await readGitDataFromPath(localPath)
+
+  } catch (error) {
+    console.error(`❌ Error reading complete Git history from ${localPath}:`, error)
+    return null
+  }
+}
+
 export const readGitDataFromPath = async (localPath: string) => {
   try {
     console.log(`📂 Reading Git data directly from stored path: ${localPath}`)
@@ -45,6 +71,34 @@ export const readGitDataFromPath = async (localPath: string) => {
     console.error(`❌ Error reading Git data from ${localPath}:`, error)
     return null
   }
+}
+
+export const generateCommitsFromHistory = async (history: any) => {
+  if (!history || !history.commits) {
+    return []
+  }
+
+  const commits: GitHubCommit[] = history.commits.map((commit: any) => ({
+    sha: commit.sha,
+    commit: {
+      author: {
+        name: commit.author.name,
+        email: commit.author.email,
+        date: commit.date
+      },
+      message: commit.message
+    },
+    author: {
+      login: commit.author.name.toLowerCase().replace(/\s+/g, ''),
+      avatar_url: `/default-avatar.png`
+    },
+    stats: commit.stats || {
+      additions: 0,
+      deletions: 0
+    }
+  }))
+
+  return commits
 }
 
 export const generateCommitsFromRealData = async (repositories: any[]) => {

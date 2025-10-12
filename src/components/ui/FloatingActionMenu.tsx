@@ -16,6 +16,11 @@ export function FloatingActionMenu() {
   // Check if we're on the dashboard
   const isDashboard = pathname === '/dashboard' || pathname === '/dashboard/'
 
+  // Close modal when pathname changes (e.g., when back button is clicked)
+  useEffect(() => {
+    setShowRepoVisualization(false)
+  }, [pathname])
+
   // Debug logging
   useEffect(() => {
     console.log('FloatingActionMenu - pathname:', pathname)
@@ -30,6 +35,8 @@ export function FloatingActionMenu() {
       fetchProjectData(projectId)
     } else {
       setCurrentProject(null)
+      // Close the modal when navigating away from project page
+      setShowRepoVisualization(false)
     }
   }, [pathname])
 

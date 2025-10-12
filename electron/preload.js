@@ -103,6 +103,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
       console.log(`🔧 PRELOAD: Git readDirectGitState called for ${path}`);
       return ipcRenderer.invoke('git:readDirectGitState', path);
     },
+    readCompleteHistory: (path, options) => {
+      console.log(`📚 PRELOAD: Git readCompleteHistory called for ${path}`);
+      return ipcRenderer.invoke('git:readCompleteHistory', path, options);
+    },
     onEvent: (callback) => {
       console.log('🎧 PRELOAD: Setting up git:event listener');
       ipcRenderer.on('git:event', (event, data) => {

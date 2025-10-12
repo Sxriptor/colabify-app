@@ -97,17 +97,42 @@ export function useRepositoryData(isOpen: boolean, project: any) {
 
       for (const mapping of localMappings) {
         try {
-          console.log(`📂 Reading Git data from stored path: ${mapping.local_path}`)
-          const gitData = await dataFetchers.readGitDataFromPath(mapping.local_path)
+          console.log(`📚 Reading complete Git history from: ${mapping.local_path}`)
+          const history = await dataFetchers.readCompleteGitHistory(mapping.local_path)
 
-          if (gitData) {
-            allBranches.push({
-              ...gitData,
-              path: mapping.local_path,
-              user: mapping.user,
-              id: `local-${mapping.id || Date.now()}`
-            })
-            console.log(`✅ Successfully read Git data from ${mapping.local_path}`)
+          if (history) {
+            // If we got complete history, use it
+            if (history.commits && history.commits.length > 0) {
+              allBranches.push({
+                name: history.repoPath?.split('/').pop() || 'Unknown',
+                path: mapping.local_path,
+                branch: history.commits[0]?.branches?.[0] || 'main',
+                head: history.commits[0]?.sha || 'unknown',
+                dirty: false,
+                ahead: 0,
+                behind: 0,
+                localBranches: history.branches?.filter((b: any) => b.isLocal).map((b: any) => b.name) || [],
+                remoteBranches: history.branches?.filter((b: any) => b.isRemote).map((b: any) => b.name) || [],
+                remoteUrls: history.remotes || {},
+                lastChecked: history.readAt,
+                user: mapping.user,
+                id: `local-${mapping.id || Date.now()}`,
+                history: history // Store complete history
+              })
+              console.log(`✅ Read ${history.commits.length} commits from ${mapping.local_path}`)
+            } else {
+              // Fallback to basic Git data
+              const gitData = await dataFetchers.readGitDataFromPath(mapping.local_path)
+              if (gitData) {
+                allBranches.push({
+                  ...gitData,
+                  path: mapping.local_path,
+                  user: mapping.user,
+                  id: `local-${mapping.id || Date.now()}`
+                })
+                console.log(`✅ Successfully read basic Git data from ${mapping.local_path}`)
+              }
+            }
           } else {
             console.warn(`⚠️ No Git data returned from ${mapping.local_path}`)
           }
@@ -122,8 +147,23 @@ export function useRepositoryData(isOpen: boolean, project: any) {
         setDataSource('backend')
         console.log(`✅ Using real Git data from ${allBranches.length} stored repositories`)
 
-        const realCommits = await dataFetchers.generateCommitsFromRealData(allBranches)
-        setCommits(realCommits)
+        // Generate commits from complete history if available
+        const allCommits: any[] = []
+        for (const branch of allBranches) {
+          if (branch.history && branch.history.commits) {
+            const historyCommits = await dataFetchers.generateCommitsFromHistory(branch.history)
+            allCommits.push(...historyCommits)
+          }
+        }
+
+        // If we have commits from history, use them; otherwise fall back to generated data
+        if (allCommits.length > 0) {
+          setCommits(allCommits)
+          console.log(`✅ Using ${allCommits.length} commits from complete Git history`)
+        } else {
+          const realCommits = await dataFetchers.generateCommitsFromRealData(allBranches)
+          setCommits(realCommits)
+        }
 
         const realUsers = await dataFetchers.generateUsersFromRealData(allBranches)
         setLocalUsers(realUsers)

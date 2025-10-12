@@ -5,6 +5,7 @@ const { spawn } = require('child_process');
 const fs = require('fs').promises;
 const path = require('path');
 const { ipcMain } = require('electron');
+const { GitHistoryReader } = require('./git-history-reader');
 
 class SimpleGitMonitoringBackend {
   constructor() {
@@ -12,6 +13,8 @@ class SimpleGitMonitoringBackend {
     this.mainWindow = null;
     this.repositories = new Map(); // projectId -> array of repo configs
     this.watchers = new Map(); // repoId -> watcher info
+    this.historyReader = new GitHistoryReader();
+    this.historyCache = new Map(); // repoPath -> cached history
   }
 
   async initialize(mainWindow) {
@@ -84,6 +87,9 @@ class SimpleGitMonitoringBackend {
       
       ipcMain.handle('git:connectRepoToProject', this.handleConnectRepoToProject.bind(this));
       console.log('✅ Registered git:connectRepoToProject handler');
+      
+      ipcMain.handle('git:readCompleteHistory', this.handleReadCompleteHistory.bind(this));
+      console.log('✅ Registered git:readCompleteHistory handler');
       
       console.log('✅ All Git monitoring IPC handlers registered successfully');
     } catch (error) {
@@ -333,6 +339,38 @@ class SimpleGitMonitoringBackend {
     return this.initialized;
   }
 
+  async handleReadCompleteHistory(event, repoPath, options = {}) {
+    try {
+      console.log(`📚 Git IPC: Reading complete history from ${repoPath}`);
+      
+      // Check cache first
+      const cacheKey = `${repoPath}-${JSON.stringify(options)}`;
+      if (this.historyCache.has(cacheKey)) {
+        const cached = this.historyCache.get(cacheKey);
+        const cacheAge = Date.now() - new Date(cached.readAt).getTime();
+        
+        // Use cache if less than 5 minutes old
+        if (cacheAge < 5 * 60 * 1000) {
+          console.log(`✅ Using cached history for ${repoPath} (${Math.round(cacheAge / 1000)}s old)`);
+          return cached;
+        }
+      }
+
+      // Read fresh history
+      const history = await this.historyReader.readCompleteHistory(repoPath, options);
+      
+      // Cache the result
+      this.historyCache.set(cacheKey, history);
+      
+      console.log(`✅ Git IPC: Read complete history from ${repoPath} - ${history.commits.length} commits`);
+      return history;
+      
+    } catch (error) {
+      console.error(`❌ Git IPC: Failed to read complete history from ${repoPath}:`, error);
+      throw error;
+    }
+  }
+
   async cleanup() {
     console.log('🧹 Cleaning up Simple Git Monitoring Backend...');
     
@@ -341,6 +379,10 @@ class SimpleGitMonitoringBackend {
     ipcMain.removeHandler('git:listProjectRepos');
     ipcMain.removeHandler('git:getRepoState');
     ipcMain.removeHandler('git:connectRepoToProject');
+    ipcMain.removeHandler('git:readCompleteHistory');
+    
+    // Clear caches
+    this.historyCache.clear();
     
     this.initialized = false;
     console.log('✅ Simple Git Monitoring Backend cleaned up');
