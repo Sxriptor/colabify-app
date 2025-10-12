@@ -29,6 +29,20 @@ export function CommitBubbles({ commits }: CommitBubblesProps) {
   const svgRef = useRef<SVGSVGElement>(null)
   const [selectedCommit, setSelectedCommit] = useState<CommitData | null>(null)
 
+  // Get unique authors and assign colors
+  const authors = Array.from(new Set(commits.map(c => c.commit.author.name)))
+  const authorColors = [
+    '#dc2626', // dark red
+    '#2563eb', // blue
+    '#7c3aed', // purple
+    '#f5f5f5', // white
+    '#ea580c', // orange
+  ]
+  const getAuthorColor = (author: string) => {
+    const index = authors.indexOf(author)
+    return authorColors[index % authorColors.length]
+  }
+
   useEffect(() => {
     if (!svgRef.current || commits.length === 0) return
 
@@ -95,14 +109,13 @@ export function CommitBubbles({ commits }: CommitBubblesProps) {
       .attr('r', 0)
       .attr('fill', d => {
         const data = d.data as CommitData
-        const activity = (data.additions || 0) + (data.deletions || 0)
-        return activity > 100 ? '#a855f7' : activity > 50 ? '#00e0ff' : '#22c55e'
+        return getAuthorColor(data.author)
       })
-      .attr('fill-opacity', 0.7)
+      .attr('fill-opacity', 0.8)
       .attr('stroke', d => {
         const data = d.data as CommitData
-        const activity = (data.additions || 0) + (data.deletions || 0)
-        return activity > 100 ? '#7c3aed' : activity > 50 ? '#0891b2' : '#16a34a'
+        const color = getAuthorColor(data.author)
+        return d3.color(color)?.darker(0.5).toString() || color
       })
       .attr('stroke-width', 2)
       .attr('filter', 'url(#bubbleGlow)')
@@ -177,23 +190,23 @@ export function CommitBubbles({ commits }: CommitBubblesProps) {
             COMMIT GARDEN
           </h3>
           <p className="text-gray-500 font-mono text-xs mt-1">
-            {commits.length} commits • Circle size = code changes
+            {commits.length} commits • Circle size = code changes • Color = author
           </p>
         </div>
-        <div className="flex items-center space-x-3">
-          <div className="flex items-center space-x-2 text-xs font-mono">
-            <div className="flex items-center space-x-1">
-              <div className="w-3 h-3 rounded-full bg-[#22c55e]"></div>
-              <span className="text-gray-500">Small</span>
-            </div>
-            <div className="flex items-center space-x-1">
-              <div className="w-3 h-3 rounded-full bg-[#00e0ff]"></div>
-              <span className="text-gray-500">Medium</span>
-            </div>
-            <div className="flex items-center space-x-1">
-              <div className="w-3 h-3 rounded-full bg-[#a855f7]"></div>
-              <span className="text-gray-500">Large</span>
-            </div>
+        <div className="flex items-center space-x-4">
+          <div className="flex items-center space-x-3 text-xs font-mono">
+            {authors.slice(0, 5).map((author, index) => (
+              <div key={author} className="flex items-center space-x-1.5">
+                <div 
+                  className="w-3 h-3 rounded-full" 
+                  style={{ backgroundColor: authorColors[index % authorColors.length] }}
+                ></div>
+                <span className="text-gray-400 truncate max-w-[100px]">{author}</span>
+              </div>
+            ))}
+            {authors.length > 5 && (
+              <span className="text-gray-500">+{authors.length - 5} more</span>
+            )}
           </div>
         </div>
       </div>

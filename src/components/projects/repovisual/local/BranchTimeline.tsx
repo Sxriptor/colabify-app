@@ -14,6 +14,20 @@ export function BranchTimeline({ commits, branches = [] }: BranchTimelineProps) 
   const [hoveredCommit, setHoveredCommit] = useState<any>(null)
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 })
 
+  // Get unique authors and assign colors
+  const authors = Array.from(new Set(commits.map(c => c.commit.author.name)))
+  const authorColors = [
+    '#dc2626', // dark red
+    '#2563eb', // blue
+    '#7c3aed', // purple
+    '#f5f5f5', // white
+    '#ea580c', // orange
+  ]
+  const getAuthorColor = (author: string) => {
+    const index = authors.indexOf(author)
+    return authorColors[index % authorColors.length]
+  }
+
   useEffect(() => {
     if (!svgRef.current || commits.length === 0) return
 
@@ -119,13 +133,10 @@ export function BranchTimeline({ commits, branches = [] }: BranchTimelineProps) 
       .attr('cx', d => xScale(d.date))
       .attr('cy', innerHeight / 2)
       .attr('r', 0)
-      .attr('fill', (d, i) => {
-        const ratio = i / data.length
-        return ratio < 0.33 ? '#22c55e' : ratio < 0.66 ? '#00e0ff' : '#a855f7'
-      })
-      .attr('stroke', (d, i) => {
-        const ratio = i / data.length
-        return ratio < 0.33 ? '#16a34a' : ratio < 0.66 ? '#0891b2' : '#7c3aed'
+      .attr('fill', d => getAuthorColor(d.author))
+      .attr('stroke', d => {
+        const color = getAuthorColor(d.author)
+        return d3.color(color)?.darker(0.5).toString() || color
       })
       .attr('stroke-width', 2)
       .attr('filter', 'url(#timelineGlow)')
@@ -142,27 +153,23 @@ export function BranchTimeline({ commits, branches = [] }: BranchTimelineProps) 
       })
 
     // Interactions
-    circles.on('mouseenter', function(event, d) {
+    circles.on('mouseenter', function(event, d: any) {
+      const activity = d.additions + d.deletions
       d3.select(this)
         .transition()
         .duration(200)
-        .attr('r', d => {
-          const activity = d.additions + d.deletions
-          return activity > 100 ? 12 : activity > 50 ? 10 : 8
-        })
+        .attr('r', activity > 100 ? 12 : activity > 50 ? 10 : 8)
 
       setHoveredCommit(d)
       setMousePos({ x: event.pageX, y: event.pageY })
     })
 
-    circles.on('mouseleave', function(event, d) {
+    circles.on('mouseleave', function(event, d: any) {
+      const activity = d.additions + d.deletions
       d3.select(this)
         .transition()
         .duration(200)
-        .attr('r', d => {
-          const activity = d.additions + d.deletions
-          return activity > 100 ? 8 : activity > 50 ? 6 : 5
-        })
+        .attr('r', activity > 100 ? 8 : activity > 50 ? 6 : 5)
 
       setHoveredCommit(null)
     })
@@ -171,13 +178,29 @@ export function BranchTimeline({ commits, branches = [] }: BranchTimelineProps) 
 
   return (
     <div className="border border-gray-800/50 bg-gradient-to-br from-[#050509] via-[#0a0f1a] to-[#050509] rounded-lg overflow-hidden">
-      <div className="border-b border-gray-800/50 p-5 bg-black/40 backdrop-blur-sm">
-        <h3 className="text-transparent bg-clip-text bg-gradient-to-r from-[#22c55e] to-[#00e0ff] font-mono text-sm font-semibold tracking-wide">
-          COMMIT TIMELINE
-        </h3>
-        <p className="text-gray-500 font-mono text-xs mt-1">
-          Chronological progression • {commits.length} commits over time
-        </p>
+      <div className="border-b border-gray-800/50 p-5 flex items-center justify-between bg-black/40 backdrop-blur-sm">
+        <div>
+          <h3 className="text-transparent bg-clip-text bg-gradient-to-r from-[#22c55e] to-[#00e0ff] font-mono text-sm font-semibold tracking-wide">
+            COMMIT TIMELINE
+          </h3>
+          <p className="text-gray-500 font-mono text-xs mt-1">
+            Chronological progression • {commits.length} commits over time • Color = author
+          </p>
+        </div>
+        <div className="flex items-center space-x-3 text-xs font-mono">
+          {authors.slice(0, 5).map((author, index) => (
+            <div key={author} className="flex items-center space-x-1.5">
+              <div 
+                className="w-3 h-3 rounded-full" 
+                style={{ backgroundColor: authorColors[index % authorColors.length] }}
+              ></div>
+              <span className="text-gray-400 truncate max-w-[100px]">{author}</span>
+            </div>
+          ))}
+          {authors.length > 5 && (
+            <span className="text-gray-500">+{authors.length - 5} more</span>
+          )}
+        </div>
       </div>
       <div className="p-6 relative">
         <svg ref={svgRef} width={1200} height={200} className="bg-gradient-to-br from-[#050509] via-[#0a0f1a] to-[#050509]" />

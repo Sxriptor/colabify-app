@@ -20,6 +20,20 @@ interface ContributorData {
 export function ContributorGraph({ commits }: ContributorGraphProps) {
   const svgRef = useRef<SVGSVGElement>(null)
 
+  // Get unique authors and assign colors
+  const authors = Array.from(new Set(commits.map(c => c.commit.author.name)))
+  const authorColors = [
+    '#dc2626', // dark red
+    '#2563eb', // blue
+    '#7c3aed', // purple
+    '#f5f5f5', // white
+    '#ea580c', // orange
+  ]
+  const getAuthorColor = (author: string) => {
+    const index = authors.indexOf(author)
+    return authorColors[index % authorColors.length]
+  }
+
   useEffect(() => {
     if (!svgRef.current || commits.length === 0) return
 
@@ -109,24 +123,6 @@ export function ContributorGraph({ commits }: ContributorGraphProps) {
     feMerge.append('feMergeNode').attr('in', 'coloredBlur')
     feMerge.append('feMergeNode').attr('in', 'SourceGraphic')
 
-    // Gradient for bars
-    const barGradient = defs.append('linearGradient')
-      .attr('id', 'barGradient')
-      .attr('x1', '0%')
-      .attr('y1', '100%')
-      .attr('x2', '0%')
-      .attr('y2', '0%')
-
-    barGradient.append('stop')
-      .attr('offset', '0%')
-      .attr('stop-color', '#0891b2')
-      .attr('stop-opacity', 0.8)
-
-    barGradient.append('stop')
-      .attr('offset', '100%')
-      .attr('stop-color', '#00e0ff')
-      .attr('stop-opacity', 1)
-
     // Add bars with animation
     g.selectAll('rect')
       .data(data)
@@ -135,7 +131,13 @@ export function ContributorGraph({ commits }: ContributorGraphProps) {
       .attr('y', innerHeight)
       .attr('width', xScale.bandwidth())
       .attr('height', 0)
-      .attr('fill', 'url(#barGradient)')
+      .attr('fill', d => getAuthorColor(d.name))
+      .attr('fill-opacity', 0.8)
+      .attr('stroke', d => {
+        const color = getAuthorColor(d.name)
+        return d3.color(color)?.darker(0.5).toString() || color
+      })
+      .attr('stroke-width', 2)
       .attr('filter', 'url(#barGlow)')
       .attr('cursor', 'pointer')
       .attr('rx', 4)
@@ -147,10 +149,12 @@ export function ContributorGraph({ commits }: ContributorGraphProps) {
       .attr('height', d => innerHeight - yScale(d.commits))
       .selection()
       .on('mouseenter', function(event, d) {
+        const color = getAuthorColor(d.name)
         d3.select(this)
           .transition()
           .duration(300)
-          .attr('fill', '#60a5fa')
+          .attr('fill', color)
+          .attr('fill-opacity', 1)
           .attr('filter', 'url(#barGlow) brightness(1.2)')
 
         // Show tooltip with fade in
@@ -207,11 +211,13 @@ export function ContributorGraph({ commits }: ContributorGraphProps) {
           .duration(200)
           .attr('opacity', 1)
       })
-      .on('mouseleave', function() {
+      .on('mouseleave', function(event, d) {
+        const color = getAuthorColor(d.name)
         d3.select(this)
           .transition()
           .duration(300)
-          .attr('fill', 'url(#barGradient)')
+          .attr('fill', color)
+          .attr('fill-opacity', 0.8)
           .attr('filter', 'url(#barGlow)')
 
         g.selectAll('.tooltip')
@@ -225,13 +231,29 @@ export function ContributorGraph({ commits }: ContributorGraphProps) {
 
   return (
     <div className="border border-gray-800/50 bg-gradient-to-br from-[#050509] via-[#0a0f1a] to-[#050509] rounded-lg overflow-hidden">
-      <div className="border-b border-gray-800/50 p-5 bg-black/40 backdrop-blur-sm">
-        <h3 className="text-transparent bg-clip-text bg-gradient-to-r from-[#00e0ff] to-[#0891b2] font-mono text-sm font-semibold tracking-wide">
-          CONTRIBUTOR ACTIVITY
-        </h3>
-        <p className="text-gray-500 font-mono text-xs mt-1">
-          Code contributions by team member
-        </p>
+      <div className="border-b border-gray-800/50 p-5 flex items-center justify-between bg-black/40 backdrop-blur-sm">
+        <div>
+          <h3 className="text-transparent bg-clip-text bg-gradient-to-r from-[#00e0ff] to-[#0891b2] font-mono text-sm font-semibold tracking-wide">
+            CONTRIBUTOR ACTIVITY
+          </h3>
+          <p className="text-gray-500 font-mono text-xs mt-1">
+            Code contributions by team member • Color = author
+          </p>
+        </div>
+        <div className="flex items-center space-x-3 text-xs font-mono">
+          {authors.slice(0, 5).map((author, index) => (
+            <div key={author} className="flex items-center space-x-1.5">
+              <div 
+                className="w-3 h-3 rounded-sm" 
+                style={{ backgroundColor: authorColors[index % authorColors.length] }}
+              ></div>
+              <span className="text-gray-400 truncate max-w-[100px]">{author}</span>
+            </div>
+          ))}
+          {authors.length > 5 && (
+            <span className="text-gray-500">+{authors.length - 5} more</span>
+          )}
+        </div>
       </div>
       <div className="p-6">
         <svg ref={svgRef} width={1200} height={420} className="bg-gradient-to-br from-[#050509] via-[#0a0f1a] to-[#050509]" />
