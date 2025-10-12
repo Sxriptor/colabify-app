@@ -29,6 +29,17 @@ interface GitHubBranch {
   aheadBy?: number
   behindBy?: number
   isDefault?: boolean
+  // Local Git data properties (when fetched from backend)
+  branch?: string
+  head?: string
+  dirty?: boolean
+  ahead?: number
+  behind?: number
+  localBranches?: string[]
+  remoteBranches?: string[]
+  path?: string
+  user?: any
+  id?: string
 }
 
 interface GitHubCommit {
@@ -214,9 +225,34 @@ export function RepoVisualizationModal({ isOpen, onClose, project }: RepoVisuali
 
         const realUsers = await generateUsersFromRealData(allBranches)
         setLocalUsers(realUsers)
+      }
+      
+      // ALWAYS try to fetch GitHub data for the Remote tab (regardless of local data)
+      console.log('🔍 Attempting to fetch GitHub data for Remote tab...')
+      if (project.repositories?.[0]?.url) {
+        try {
+          const repo = project.repositories[0]
+          const urlParts = repo.url.replace('https://github.com/', '').split('/')
+          const owner = urlParts[0]
+          const repoName = urlParts[1]?.replace(/\.git$/, '')
 
-        // Don't fetch GitHub branches - we already have local repository data
+          if (owner && repoName) {
+            console.log(`📡 Fetching GitHub branches for ${owner}/${repoName}`)
+            await fetchGitHubBranches(owner, repoName)
+          } else {
+            console.warn('⚠️ Could not parse owner/repo from URL:', repo.url)
+            setGithubDataSource('disconnected')
+          }
+        } catch (githubError) {
+          console.error('❌ Error fetching GitHub data:', githubError)
+          setGithubDataSource('disconnected')
+        }
       } else {
+        console.log('⚠️ No remote repository URL configured')
+        setGithubDataSource('disconnected')
+      }
+      
+      if (allBranches.length === 0) {
         console.log(`⚠️ No Git data could be read, falling back to mock data`)
         await fetchMockBranches()
         await fetchMockCommits()
@@ -484,6 +520,7 @@ export function RepoVisualizationModal({ isOpen, onClose, project }: RepoVisuali
           return
         } else {
           console.log(`⚠️ GitHub API returned ${response.status}: ${response.statusText}`)
+          setGithubDataSource('disconnected')
           if (response.status === 401) {
             setError('GitHub token invalid or expired. Please sign in again.')
           } else if (response.status === 403) {
@@ -492,6 +529,7 @@ export function RepoVisualizationModal({ isOpen, onClose, project }: RepoVisuali
         }
       } catch (apiError) {
         console.log('❌ GitHub API error:', apiError)
+        setGithubDataSource('disconnected')
       }
 
       // Fallback to mock data
@@ -776,7 +814,8 @@ export function RepoVisualizationModal({ isOpen, onClose, project }: RepoVisuali
       console.log(`📂 Reading Git data directly from stored path: ${localPath}`)
 
       // Use direct Git state reading method - NO SEARCHING
-      if (electronAPI.git && electronAPI.git.readDirectGitState) {
+      const electronAPI = (window as any).electronAPI
+      if (electronAPI && electronAPI.git && electronAPI.git.readDirectGitState) {
         const repoState = await electronAPI.git.readDirectGitState(localPath)
         console.log(`📊 Direct Git state from ${localPath}:`, repoState)
 
@@ -1514,16 +1553,16 @@ export function RepoVisualizationModal({ isOpen, onClose, project }: RepoVisuali
                         </div>
                         <div className="p-4">
                           <div className="flex items-center space-x-3">
-                            <div className={`w-3 h-3 ${dataSource === 'github' ? 'bg-green-400' : 'bg-red-400'
+                            <div className={`w-3 h-3 ${githubDataSource === 'connected' ? 'bg-green-400' : 'bg-red-400'
                               }`}></div>
                             <span className="text-white font-mono text-sm">
-                              {dataSource === 'github' ? 'CONNECTED' : 'DISCONNECTED'}
+                              {githubDataSource === 'connected' ? 'CONNECTED' : 'DISCONNECTED'}
                             </span>
                           </div>
                           <p className="text-gray-400 font-mono text-xs mt-2">
-                            {dataSource === 'github'
-                              ? 'Successfully fetching data from GitHub API'
-                              : 'Using local Git data only - GitHub API unavailable'
+                            {githubDataSource === 'connected'
+                              ? `Successfully connected to GitHub API${githubConnected ? ' (Authenticated)' : ' (Public access)'}`
+                              : 'GitHub API unavailable - Check connection and token'
                             }
                           </p>
                         </div>
