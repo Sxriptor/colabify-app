@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import * as d3 from 'd3'
 import { GitHubCommit } from '../types'
 
@@ -11,6 +11,8 @@ interface BranchTimelineProps {
 
 export function BranchTimeline({ commits, branches = [] }: BranchTimelineProps) {
   const svgRef = useRef<SVGSVGElement>(null)
+  const [hoveredCommit, setHoveredCommit] = useState<any>(null)
+  const [mousePos, setMousePos] = useState({ x: 0, y: 0 })
 
   useEffect(() => {
     if (!svgRef.current || commits.length === 0) return
@@ -19,8 +21,8 @@ export function BranchTimeline({ commits, branches = [] }: BranchTimelineProps) 
     svg.selectAll('*').remove()
 
     const width = 1200
-    const height = 300
-    const margin = { top: 40, right: 40, bottom: 40, left: 60 }
+    const height = 200
+    const margin = { top: 30, right: 40, bottom: 50, left: 40 }
     const innerWidth = width - margin.left - margin.right
     const innerHeight = height - margin.top - margin.bottom
 
@@ -33,17 +35,15 @@ export function BranchTimeline({ commits, branches = [] }: BranchTimelineProps) 
       date: new Date(c.commit.author.date),
       author: c.commit.author.name,
       message: c.commit.message.split('\n')[0],
-      sha: c.sha
+      sha: c.sha,
+      additions: c.stats?.additions || 0,
+      deletions: c.stats?.deletions || 0
     })).sort((a, b) => a.date.getTime() - b.date.getTime())
 
     // Create scales
     const xScale = d3.scaleTime()
       .domain(d3.extent(data, d => d.date) as [Date, Date])
       .range([0, innerWidth])
-
-    const yScale = d3.scaleLinear()
-      .domain([0, d3.max(data, (d, i) => i) || 0])
-      .range([innerHeight, 0])
 
     // Add definitions for gradients and filters
     const defs = svg.append('defs')
@@ -57,7 +57,7 @@ export function BranchTimeline({ commits, branches = [] }: BranchTimelineProps) 
       .attr('height', '200%')
 
     filter.append('feGaussianBlur')
-      .attr('stdDeviation', '2')
+      .attr('stdDeviation', '3')
       .attr('result', 'coloredBlur')
 
     const feMerge = filter.append('feMerge')
@@ -75,65 +75,49 @@ export function BranchTimeline({ commits, branches = [] }: BranchTimelineProps) 
     gradient.append('stop')
       .attr('offset', '0%')
       .attr('stop-color', '#22c55e')
-      .attr('stop-opacity', 0.8)
 
     gradient.append('stop')
       .attr('offset', '50%')
       .attr('stop-color', '#00e0ff')
-      .attr('stop-opacity', 0.8)
 
     gradient.append('stop')
       .attr('offset', '100%')
       .attr('stop-color', '#a855f7')
-      .attr('stop-opacity', 0.8)
 
-    // Add axes with custom styling
+    // Add x-axis
     const xAxis = d3.axisBottom(xScale)
-      .ticks(8)
+      .ticks(6)
       .tickFormat(d3.timeFormat('%b %d') as any)
 
     g.append('g')
       .attr('transform', `translate(0,${innerHeight})`)
       .call(xAxis)
-      .attr('color', '#475569')
-      .selectAll('text')
-      .attr('font-family', 'ui-monospace, monospace')
-      .attr('font-size', '10px')
-      .attr('fill', '#64748b')
+      .call(g => g.select('.domain').attr('stroke', '#334155'))
+      .call(g => g.selectAll('.tick line').attr('stroke', '#334155'))
+      .call(g => g.selectAll('.tick text')
+        .attr('fill', '#64748b')
+        .attr('font-family', 'ui-monospace, monospace')
+        .attr('font-size', '11px'))
 
-    // Draw timeline line with gradient
-    const line = d3.line<typeof data[0]>()
-      .x(d => xScale(d.date))
-      .y((d, i) => yScale(i))
-      .curve(d3.curveCatmullRom.alpha(0.5))
-
-    const path = g.append('path')
-      .datum(data)
-      .attr('fill', 'none')
+    // Draw baseline
+    g.append('line')
+      .attr('x1', 0)
+      .attr('y1', innerHeight / 2)
+      .attr('x2', 0)
+      .attr('y2', innerHeight / 2)
       .attr('stroke', 'url(#timelineGradient)')
-      .attr('stroke-width', 3)
-      .attr('filter', 'url(#timelineGlow)')
-      .attr('d', line)
-      .attr('stroke-dasharray', function() {
-        const length = (this as SVGPathElement).getTotalLength()
-        return `${length} ${length}`
-      })
-      .attr('stroke-dashoffset', function() {
-        return (this as SVGPathElement).getTotalLength()
-      })
+      .attr('stroke-width', 2)
+      .attr('opacity', 0.3)
+      .transition()
+      .duration(1500)
+      .attr('x2', innerWidth)
 
-    // Animate line drawing
-    path.transition()
-      .duration(2500)
-      .ease(d3.easeQuadInOut)
-      .attr('stroke-dashoffset', 0)
-
-    // Add commit points with staggered animation
-    g.selectAll('circle')
+    // Add commit points
+    const circles = g.selectAll('circle')
       .data(data)
       .join('circle')
       .attr('cx', d => xScale(d.date))
-      .attr('cy', (d, i) => yScale(i))
+      .attr('cy', innerHeight / 2)
       .attr('r', 0)
       .attr('fill', (d, i) => {
         const ratio = i / data.length
@@ -146,70 +130,42 @@ export function BranchTimeline({ commits, branches = [] }: BranchTimelineProps) 
       .attr('stroke-width', 2)
       .attr('filter', 'url(#timelineGlow)')
       .attr('cursor', 'pointer')
-      .transition()
-      .delay((d, i) => i * 30)
+
+    // Animate circles in
+    circles.transition()
+      .delay((d, i) => 500 + i * 20)
       .duration(600)
       .ease(d3.easeElastic)
-      .attr('r', 5)
-      .selection()
-      .on('mouseenter', function(event, d) {
-        d3.select(this)
-          .transition()
-          .duration(300)
-          .ease(d3.easeElastic)
-          .attr('r', 8)
-
-        // Show tooltip with fade in
-        const tooltip = g.append('g')
-          .attr('class', 'tooltip')
-          .attr('transform', `translate(${xScale(d.date)},${yScale(data.indexOf(d)) - 30})`)
-          .attr('opacity', 0)
-
-        tooltip.append('rect')
-          .attr('x', -110)
-          .attr('y', -50)
-          .attr('width', 220)
-          .attr('height', 45)
-          .attr('fill', '#0f172a')
-          .attr('stroke', '#334155')
-          .attr('stroke-width', 1)
-          .attr('rx', 6)
-          .attr('filter', 'url(#timelineGlow)')
-
-        tooltip.append('text')
-          .attr('text-anchor', 'middle')
-          .attr('y', -32)
-          .attr('fill', '#e2e8f0')
-          .attr('font-family', 'ui-monospace, monospace')
-          .attr('font-size', '11px')
-          .attr('font-weight', '500')
-          .text(d.message.substring(0, 28) + (d.message.length > 28 ? '...' : ''))
-
-        tooltip.append('text')
-          .attr('text-anchor', 'middle')
-          .attr('y', -16)
-          .attr('fill', '#94a3b8')
-          .attr('font-family', 'ui-monospace, monospace')
-          .attr('font-size', '9px')
-          .text(d.author)
-
-        tooltip.transition()
-          .duration(200)
-          .attr('opacity', 1)
+      .attr('r', d => {
+        const activity = d.additions + d.deletions
+        return activity > 100 ? 8 : activity > 50 ? 6 : 5
       })
-      .on('mouseleave', function() {
-        d3.select(this)
-          .transition()
-          .duration(300)
-          .ease(d3.easeElastic)
-          .attr('r', 5)
 
-        g.selectAll('.tooltip')
-          .transition()
-          .duration(150)
-          .attr('opacity', 0)
-          .remove()
-      })
+    // Interactions
+    circles.on('mouseenter', function(event, d) {
+      d3.select(this)
+        .transition()
+        .duration(200)
+        .attr('r', d => {
+          const activity = d.additions + d.deletions
+          return activity > 100 ? 12 : activity > 50 ? 10 : 8
+        })
+
+      setHoveredCommit(d)
+      setMousePos({ x: event.pageX, y: event.pageY })
+    })
+
+    circles.on('mouseleave', function(event, d) {
+      d3.select(this)
+        .transition()
+        .duration(200)
+        .attr('r', d => {
+          const activity = d.additions + d.deletions
+          return activity > 100 ? 8 : activity > 50 ? 6 : 5
+        })
+
+      setHoveredCommit(null)
+    })
 
   }, [commits])
 
@@ -217,14 +173,43 @@ export function BranchTimeline({ commits, branches = [] }: BranchTimelineProps) 
     <div className="border border-gray-800/50 bg-gradient-to-br from-[#050509] via-[#0a0f1a] to-[#050509] rounded-lg overflow-hidden">
       <div className="border-b border-gray-800/50 p-5 bg-black/40 backdrop-blur-sm">
         <h3 className="text-transparent bg-clip-text bg-gradient-to-r from-[#22c55e] to-[#00e0ff] font-mono text-sm font-semibold tracking-wide">
-          BRANCH TIMELINE
+          COMMIT TIMELINE
         </h3>
         <p className="text-gray-500 font-mono text-xs mt-1">
-          Chronological commit progression • {commits.length} commits
+          Chronological progression • {commits.length} commits over time
         </p>
       </div>
-      <div className="p-6">
-        <svg ref={svgRef} width={1200} height={320} className="bg-gradient-to-br from-[#050509] via-[#0a0f1a] to-[#050509]" />
+      <div className="p-6 relative">
+        <svg ref={svgRef} width={1200} height={200} className="bg-gradient-to-br from-[#050509] via-[#0a0f1a] to-[#050509]" />
+        
+        {hoveredCommit && (
+          <div 
+            className="fixed z-50 bg-gradient-to-br from-gray-900/95 to-gray-950/95 backdrop-blur-md border border-gray-700/50 rounded-lg p-4 shadow-2xl pointer-events-none"
+            style={{
+              left: mousePos.x + 15,
+              top: mousePos.y + 15,
+              maxWidth: '300px'
+            }}
+          >
+            <div className="space-y-2 text-xs font-mono">
+              <div className="text-[#00e0ff] font-semibold truncate">
+                {hoveredCommit.message}
+              </div>
+              <div className="text-gray-400">
+                {hoveredCommit.author}
+              </div>
+              <div className="text-gray-500 text-[10px]">
+                {new Date(hoveredCommit.date).toLocaleString()}
+              </div>
+              {(hoveredCommit.additions > 0 || hoveredCommit.deletions > 0) && (
+                <div className="flex items-center space-x-2 pt-1 border-t border-gray-800">
+                  <span className="text-[#22c55e]">+{hoveredCommit.additions}</span>
+                  <span className="text-[#ef4444]">-{hoveredCommit.deletions}</span>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )
