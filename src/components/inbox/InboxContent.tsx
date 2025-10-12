@@ -24,17 +24,53 @@ interface Invitation {
   }
 }
 
+interface InboxItem {
+  id: string
+  user_id: string
+  type: 'invitation' | 'mention' | 'assignment' | 'comment'
+  title: string
+  message: string | null
+  link: string | null
+  read: boolean
+  created_at: string
+}
+
+interface NotificationItem {
+  id: string
+  project_id: string
+  repository_id: string
+  event_type: string
+  triggered_by: string
+  payload: any
+  message: string
+  created_at: string
+  project: {
+    id: string
+    name: string
+  }
+  repository: {
+    id: string
+    name: string
+    full_name: string
+  }
+}
+
 export function InboxContent() {
   const { user } = useAuth()
   const router = useRouter()
   const [invitations, setInvitations] = useState<Invitation[]>([])
+  const [notifications, setNotifications] = useState<NotificationItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [processingInvites, setProcessingInvites] = useState<Set<string>>(new Set())
 
   useEffect(() => {
-    fetchInvitations()
+    fetchInboxData()
   }, [])
+
+  const fetchInboxData = async () => {
+    await Promise.all([fetchInvitations(), fetchNotifications()])
+  }
 
   const fetchInvitations = async () => {
     try {
@@ -63,9 +99,55 @@ export function InboxContent() {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred')
     } finally {
+      // Don't set loading false here since we're fetching both invitations and items
+    }
+  }
+
+  const fetchNotifications = async () => {
+    try {
+      const { createElectronClient } = await import('@/lib/supabase/electron-client')
+      const supabase = await createElectronClient()
+
+      // Get project IDs the user can access (owned + member of)
+      const { data: userProjects, error: projectsError } = await supabase
+        .from('projects')
+        .select('id')
+        .or(`owner_id.eq.${user!.id},id.in.(${supabase
+          .from('project_members')
+          .select('project_id')
+          .eq('user_id', user!.id)
+          .eq('status', 'active')
+        })`)
+
+      if (projectsError || !userProjects || userProjects.length === 0) {
+        setNotifications([])
+        return
+      }
+
+      const projectIds = userProjects.map(p => p.id)
+
+      // Get notifications for projects the user can access
+      const { data, error } = await supabase
+        .from('notifications')
+        .select(`
+          *,
+          project:projects(id, name),
+          repository:repositories(id, name, full_name)
+        `)
+        .in('project_id', projectIds)
+        .order('created_at', { ascending: false })
+        .limit(50) // Limit to avoid too many notifications
+
+      if (error) throw error
+      setNotifications(data || [])
+    } catch (err) {
+      console.error('Error fetching notifications:', err)
+      // Don't set error state for notifications to avoid blocking the UI
+    } finally {
       setLoading(false)
     }
   }
+
 
   const handleInvitationResponse = async (invitationId: string, action: 'accept' | 'decline') => {
     setProcessingInvites(prev => new Set(prev).add(invitationId))
@@ -181,8 +263,8 @@ export function InboxContent() {
       <main className="max-w-4xl mx-auto py-6 sm:px-6 lg:px-8">
         <div className="px-4 py-6 sm:px-0">
           <div className="mb-6">
-            <h2 className="text-2xl font-bold text-gray-900">Project Invitations</h2>
-            <p className="text-gray-600">Manage your pending project invitations</p>
+            <h2 className="text-2xl font-bold text-gray-900">Inbox</h2>
+            <p className="text-gray-600">Manage your notifications and project invitations</p>
           </div>
 
           {error && (
@@ -191,13 +273,64 @@ export function InboxContent() {
             </div>
           )}
 
-          {invitations.length === 0 ? (
+          {/* Notifications Section */}
+          {notifications.length > 0 && (
+            <div className="mb-8">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Notifications</h3>
+              <div className="space-y-4">
+                {notifications.map((notification) => (
+                  <div key={notification.id} className="bg-white shadow rounded-lg border border-gray-200">
+                    <div className="p-6">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-3 mb-2">
+                            <h4 className="text-lg font-medium text-gray-900">
+                              {notification.project.name} - {notification.repository.name}
+                            </h4>
+                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                              notification.event_type === 'push' ? 'bg-green-100 text-green-800' :
+                              notification.event_type === 'pull_request' ? 'bg-blue-100 text-blue-800' :
+                              notification.event_type === 'issues' ? 'bg-red-100 text-red-800' :
+                              'bg-gray-100 text-gray-800'
+                            }`}>
+                              {notification.event_type}
+                            </span>
+                          </div>
+                          <p className="text-gray-600 mb-3">{notification.message}</p>
+                          <div className="flex items-center gap-4 text-sm text-gray-500 mb-4">
+                            <div>{formatDate(notification.created_at)}</div>
+                            <div>•</div>
+                            <div>Triggered by {notification.triggered_by}</div>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <button
+                              onClick={() => router.push(`/projects/${notification.project_id}`)}
+                              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors duration-200"
+                            >
+                              View Project
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Invitations Section */}
+          <div className="mb-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Project Invitations</h3>
+          </div>
+
+          {invitations.length === 0 && notifications.length === 0 ? (
             <div className="text-center py-12">
               <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0H4m16 0l-2-2m2 2l-2 2M4 13l2-2m-2 2l2 2" />
               </svg>
-              <h3 className="mt-2 text-sm font-medium text-gray-900">No pending invitations</h3>
-              <p className="mt-1 text-sm text-gray-500">You don't have any pending project invitations at the moment.</p>
+              <h3 className="mt-2 text-sm font-medium text-gray-900">Your inbox is empty</h3>
+              <p className="mt-1 text-sm text-gray-500">You don't have any notifications or pending project invitations.</p>
               <div className="mt-6">
                 <button
                   onClick={() => router.push('/dashboard')}
@@ -206,6 +339,14 @@ export function InboxContent() {
                   Back to Dashboard
                 </button>
               </div>
+            </div>
+          ) : invitations.length === 0 ? (
+            <div className="text-center py-8">
+              <svg className="mx-auto h-8 w-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0H4m16 0l-2-2m2 2l-2 2M4 13l2-2m-2 2l2 2" />
+              </svg>
+              <h4 className="mt-2 text-sm font-medium text-gray-900">No pending invitations</h4>
+              <p className="mt-1 text-sm text-gray-500">You don't have any pending project invitations, but you may have notifications above.</p>
             </div>
           ) : (
             <div className="space-y-4">
