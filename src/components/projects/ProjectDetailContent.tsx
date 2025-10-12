@@ -7,6 +7,7 @@ import { InviteModal } from './InviteModal'
 import { MemberManagement } from './MemberManagement'
 import { ConnectRepositoryModal } from './ConnectRepositoryModal'
 import { AddLocalFolderModal } from './AddLocalFolderModal'
+import { RecentActivityTabs } from './RecentActivityTabs'
 
 interface ProjectDetailContentProps {
   projectId: string
@@ -289,21 +290,8 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
               </div>
             </div>
 
-            {/* Activity Feed */}
-            <div className="bg-white shadow rounded-lg">
-              <div className="px-6 py-4 border-b border-gray-200">
-                <h2 className="text-lg font-medium text-gray-900">Recent Activity</h2>
-              </div>
-              <div className="p-6">
-                <div className="text-center py-8">
-                  <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  <h3 className="mt-2 text-sm font-medium text-gray-900">No activity yet</h3>
-                  <p className="mt-1 text-sm text-gray-500">Activity will appear here once you connect repositories.</p>
-                </div>
-              </div>
-            </div>
+            {/* Activity Feed with Tabs */}
+            <RecentActivityTabs project={project} />
           </div>
 
           {/* Sidebar */}

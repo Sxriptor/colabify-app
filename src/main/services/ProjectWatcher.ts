@@ -1,10 +1,11 @@
-// Project-level Git monitoring coordinator
+// Project-level Git monitoring coordinator with live activity tracking
 
 import { RepoConfig, Activity } from '../../shared/types'
 import { GitWatcher } from './GitWatcher'
 import { GitState } from './GitState'
 import { ActivityDetector } from './ActivityDetector'
 import { RepoStore } from '../store/RepoStore'
+import { LiveActivityMonitor } from './LiveActivityMonitor'
 
 export class ProjectWatcher {
   private projectId: string
