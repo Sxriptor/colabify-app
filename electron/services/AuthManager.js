@@ -9,6 +9,7 @@ class AuthManager {
     this.authPromise = null;
     this.serviceName = 'DevPulse';
     this.accountName = 'auth-token';
+    this.githubAccountName = 'github-token'; // Separate storage for GitHub token
     this.cachedUser = null; // Cache user data to avoid repeated API calls
     this.userCacheExpiry = null; // Cache expiry time
     this.cacheValidityMs = 5 * 60 * 1000; // Cache for 5 minutes
@@ -52,6 +53,7 @@ class AuthManager {
 
         if (url.pathname === '/auth/callback') {
           const token = url.searchParams.get('token');
+          const githubToken = url.searchParams.get('github_token');
           const expiresAt = url.searchParams.get('expires_at');
           const subscriptionStatus = url.searchParams.get('subscription_status');
           const error = url.searchParams.get('error');
@@ -59,6 +61,8 @@ class AuthManager {
           console.log('🔍 Callback params:', {
             hasToken: !!token,
             tokenLength: token?.length,
+            hasGithubToken: !!githubToken,
+            githubTokenLength: githubToken?.length,
             expiresAt,
             subscriptionStatus,
             error
@@ -96,8 +100,8 @@ class AuthManager {
             `);
 
             // Process the successful authentication
-            console.log('🔄 Calling processAuthCallback...');
-            this.processAuthCallback(token, expiresAt, subscriptionStatus)
+            console.log('🔄 Calling processAuthCallback with GitHub token...');
+            this.processAuthCallback(token, expiresAt, subscriptionStatus, githubToken)
               .catch(err => {
                 console.error('❌ Error in processAuthCallback:', err);
               });
@@ -142,10 +146,11 @@ class AuthManager {
   /**
    * Process the authentication callback
    */
-  async processAuthCallback(token, expiresAt, subscriptionStatus) {
+  async processAuthCallback(token, expiresAt, subscriptionStatus, githubToken) {
     try {
       console.log('🔄 Processing auth callback...');
       console.log('📥 Token received (first 50 chars):', token ? token.substring(0, 50) + '...' : 'NO TOKEN');
+      console.log('📥 GitHub token received:', githubToken ? '✅ Yes' : '❌ No');
       console.log('📥 Expires at:', expiresAt);
       console.log('📥 Subscription status:', subscriptionStatus);
 
@@ -153,10 +158,19 @@ class AuthManager {
         throw new Error('No token provided to processAuthCallback');
       }
 
-      // Store token securely
-      console.log('💾 Storing token in keytar...');
+      // Store session token securely
+      console.log('💾 Storing session token in keytar...');
       await this.storeToken(token, expiresAt);
-      console.log('✅ Token stored successfully');
+      console.log('✅ Session token stored successfully');
+
+      // Store GitHub token if provided
+      if (githubToken) {
+        console.log('💾 Storing GitHub token in keytar...');
+        await this.storeGitHubToken(githubToken);
+        console.log('✅ GitHub token stored successfully');
+      } else {
+        console.log('⚠️ No GitHub token provided - GitHub API features will be unavailable');
+      }
 
       // Get user info from the token
       console.log('👤 Fetching user info from API...');
@@ -183,9 +197,10 @@ class AuthManager {
           user: userInfo,
           token,
           expiresAt,
-          subscriptionStatus
+          subscriptionStatus,
+          githubToken // Pass GitHub token through to caller
         });
-        console.log('✅ Auth promise resolved');
+        console.log('✅ Auth promise resolved with GitHub token');
       } else {
         console.warn('⚠️ No auth promise to resolve!');
       }
@@ -315,6 +330,64 @@ class AuthManager {
   }
 
   /**
+   * Store GitHub token securely using keytar
+   */
+  async storeGitHubToken(githubToken) {
+    try {
+      const githubData = {
+        token: githubToken,
+        storedAt: Date.now()
+      };
+      
+      await keytar.setPassword(this.serviceName, this.githubAccountName, JSON.stringify(githubData));
+      console.log('🔐 GitHub token stored securely');
+    } catch (error) {
+      console.error('Error storing GitHub token:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Retrieve stored GitHub token
+   */
+  async getStoredGitHubToken() {
+    try {
+      const stored = await keytar.getPassword(this.serviceName, this.githubAccountName);
+      if (!stored) {
+        console.log('ℹ️ No GitHub token found in storage');
+        return null;
+      }
+
+      const githubData = JSON.parse(stored);
+      console.log('✅ GitHub token retrieved from storage');
+      return githubData.token;
+    } catch (error) {
+      console.error('Error retrieving GitHub token:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Clear stored GitHub token
+   */
+  async clearStoredGitHubToken() {
+    try {
+      await keytar.deletePassword(this.serviceName, this.githubAccountName);
+      console.log('🗑️ GitHub token cleared from secure storage');
+    } catch (error) {
+      console.error('Error clearing GitHub token:', error);
+    }
+  }
+
+  /**
+   * Check if GitHub token is available
+   */
+  async hasGitHubToken() {
+    const token = await this.getStoredGitHubToken();
+    return !!token;
+  }
+
+  /**
    * Begin external sign-in process
    */
   async beginExternalSignIn() {
@@ -419,6 +492,7 @@ class AuthManager {
   async signOut() {
     this.clearUserCache();
     await this.clearStoredToken();
+    await this.clearStoredGitHubToken();
     console.log('👋 User signed out');
   }
 

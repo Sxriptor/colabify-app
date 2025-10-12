@@ -22,6 +22,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getUser: () => ipcRenderer.invoke('auth:get-user'),
   isAuthenticated: () => ipcRenderer.invoke('auth:is-authenticated'),
   getToken: () => ipcRenderer.invoke('auth:get-token'),
+  getGitHubToken: () => ipcRenderer.invoke('auth:get-github-token'),
+  hasGitHubToken: () => ipcRenderer.invoke('auth:has-github-token'),
 
   // Auth event listeners
   onAuthSuccess: (callback) => {

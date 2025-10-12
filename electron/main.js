@@ -194,9 +194,13 @@ ipcMain.handle('auth:start-sign-in', async () => {
       console.log('📤 Sending auth-success event to renderer...');
       const eventData = {
         user: authResult.user,
-        subscriptionStatus: authResult.subscriptionStatus
+        subscriptionStatus: authResult.subscriptionStatus,
+        githubToken: authResult.githubToken // Pass GitHub token to renderer for immediate use
       };
-      console.log('📦 Event data:', JSON.stringify(eventData, null, 2));
+      console.log('📦 Event data (GitHub token hidden):', {
+        ...eventData,
+        githubToken: eventData.githubToken ? '***' : undefined
+      });
 
       mainWindow.webContents.send('auth-success', eventData);
       console.log('✅ Event sent successfully');
@@ -263,6 +267,26 @@ ipcMain.handle('auth:logout', async () => {
   } catch (error) {
     console.error('Error during logout:', error);
     return { success: false, error: error.message };
+  }
+});
+
+// GitHub token management
+ipcMain.handle('auth:get-github-token', async () => {
+  try {
+    const token = await authManager.getStoredGitHubToken();
+    return token;
+  } catch (error) {
+    console.error('Error getting GitHub token:', error);
+    return null;
+  }
+});
+
+ipcMain.handle('auth:has-github-token', async () => {
+  try {
+    return await authManager.hasGitHubToken();
+  } catch (error) {
+    console.error('Error checking GitHub token:', error);
+    return false;
   }
 });
 

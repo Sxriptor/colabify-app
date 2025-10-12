@@ -28,6 +28,7 @@
     "@types/nodemailer": "^7.0.2",
     "@types/web-push": "^3.6.4",
     "chokidar": "^4.0.3",
+    "d3": "^7.9.0",
     "dotenv": "^17.2.3",
     "http": "^0.0.1-security",
     "keytar": "^7.9.0",
@@ -35,6 +36,7 @@
     "nodemailer": "^7.0.9",
     "react": "19.1.0",
     "react-dom": "19.1.0",
+    "simple-git": "^3.25.0",
     "supabase": "^2.48.3",
     "web-push": "^3.6.7"
   },
@@ -43,6 +45,7 @@
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.0",
     "@types/chokidar": "^1.7.5",
+    "@types/d3": "^7.4.3",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",

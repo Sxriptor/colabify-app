@@ -84,9 +84,12 @@ export function RepoVisualizationModal({ isOpen, onClose, project }: RepoVisuali
   const [localUsers, setLocalUsers] = useState<LocalUserLocation[]>([])
   const [error, setError] = useState<string | null>(null)
   const [dataSource, setDataSource] = useState<'backend' | 'github' | 'mock'>('mock')
+  const [githubConnected, setGithubConnected] = useState<boolean>(false)
+  const [githubDataSource, setGithubDataSource] = useState<'connected' | 'disconnected'>('disconnected')
 
   useEffect(() => {
     if (isOpen && project?.repositories?.length > 0) {
+      checkGitHubConnection()
       fetchRepositoryData()
 
       // Set up real-time Git event listener
@@ -116,6 +119,19 @@ export function RepoVisualizationModal({ isOpen, onClose, project }: RepoVisuali
       }
     }
   }, [isOpen, project])
+
+  const checkGitHubConnection = async () => {
+    if (typeof window !== 'undefined' && (window as any).electronAPI) {
+      try {
+        const hasToken = await (window as any).electronAPI.hasGitHubToken()
+        setGithubConnected(hasToken)
+        console.log('🔍 GitHub connection status:', hasToken ? 'Connected' : 'Disconnected')
+      } catch (error) {
+        console.log('⚠️ Could not check GitHub connection:', error)
+        setGithubConnected(false)
+      }
+    }
+  }
 
   const fetchRepositoryData = async () => {
     setLoading(true)
@@ -413,10 +429,35 @@ export function RepoVisualizationModal({ isOpen, onClose, project }: RepoVisuali
 
   const fetchGitHubBranches = async (owner: string, repo: string) => {
     try {
-      // Try to fetch from GitHub API (public repositories)
-      // In production, you'd want to use authenticated requests for private repos
+      // Check if we have a GitHub token
+      const electronAPI = (window as any).electronAPI
+      let githubToken = null
+
+      if (electronAPI && electronAPI.getGitHubToken) {
+        try {
+          githubToken = await electronAPI.getGitHubToken()
+          console.log('🔑 GitHub token available:', !!githubToken)
+        } catch (tokenError) {
+          console.log('⚠️ Could not get GitHub token:', tokenError)
+        }
+      }
+
+      // Try to fetch from GitHub API
       try {
-        const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/branches`)
+        const headers: HeadersInit = {
+          'Accept': 'application/vnd.github.v3+json'
+        }
+
+        // Add authorization if we have a token
+        if (githubToken) {
+          headers['Authorization'] = `Bearer ${githubToken}`
+          console.log('🔐 Using authenticated GitHub API request')
+        } else {
+          console.log('📖 Using unauthenticated GitHub API request (rate limited)')
+        }
+
+        const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/branches`, { headers })
+
         if (response.ok) {
           const githubBranches = await response.json()
           const formattedBranches: GitHubBranch[] = githubBranches.slice(0, 10).map((branch: any) => ({
@@ -437,11 +478,20 @@ export function RepoVisualizationModal({ isOpen, onClose, project }: RepoVisuali
             },
             protected: branch.protected || false
           }))
-          setBranches(formattedBranches)
+          // Don't overwrite local branches, but mark GitHub as connected
+          setGithubDataSource('connected')
+          console.log('✅ Fetched branches from GitHub API')
           return
+        } else {
+          console.log(`⚠️ GitHub API returned ${response.status}: ${response.statusText}`)
+          if (response.status === 401) {
+            setError('GitHub token invalid or expired. Please sign in again.')
+          } else if (response.status === 403) {
+            setError('GitHub API rate limit exceeded. Please sign in to increase limits.')
+          }
         }
       } catch (apiError) {
-        console.log('GitHub API not available, using mock data')
+        console.log('❌ GitHub API error:', apiError)
       }
 
       // Fallback to mock data
