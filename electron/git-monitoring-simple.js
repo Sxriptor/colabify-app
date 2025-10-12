@@ -199,6 +199,27 @@ class SimpleGitMonitoring {
     
     console.log('✅ Registered git:readDirectGitState handler');
 
+    ipcMain.handle('git:readCompleteHistory', async (event, repoPath, options = {}) => {
+      console.log(`📚 Git IPC: Reading complete history from ${repoPath}`);
+      
+      try {
+        // Load the GitHistoryReader
+        const { GitHistoryReader } = require('./git-history-reader');
+        const historyReader = new GitHistoryReader();
+        
+        // Read complete history
+        const history = await historyReader.readCompleteHistory(repoPath, options);
+        
+        console.log(`✅ Read complete history: ${history.commits.length} commits, ${history.branches.length} branches`);
+        return history;
+      } catch (error) {
+        console.error(`❌ Error reading complete history from ${repoPath}:`, error);
+        throw error;
+      }
+    });
+    
+    console.log('✅ Registered git:readCompleteHistory handler');
+
     // Send test activity events for watched projects
     setInterval(() => {
       if (this.watchedProjects.size > 0 && mainWindow && !mainWindow.isDestroyed()) {
@@ -249,7 +270,8 @@ class SimpleGitMonitoring {
       'git:listProjectRepos', 
       'git:getRepoState',
       'git:connectRepoToProject',
-      'git:readDirectGitState'
+      'git:readDirectGitState',
+      'git:readCompleteHistory'
     ]);
     console.log('📋 Integration points:');
     console.log('  - Watches Supabase project_watches table changes');
@@ -455,6 +477,7 @@ class SimpleGitMonitoring {
     ipcMain.removeHandler('git:getRepoState');
     ipcMain.removeHandler('git:connectRepoToProject');
     ipcMain.removeHandler('git:readDirectGitState');
+    ipcMain.removeHandler('git:readCompleteHistory');
     
     this.watchedProjects.clear();
     this.isInitialized = false;
