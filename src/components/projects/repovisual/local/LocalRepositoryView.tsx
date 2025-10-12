@@ -7,6 +7,9 @@ import { LocalBranchList } from './LocalBranchList'
 import { RecentActivity } from './RecentActivity'
 import { LocalActivityLog } from './LocalActivityLog'
 import { TeamStatus } from './TeamStatus'
+import { CommitHistoryGraph } from './CommitHistoryGraph'
+import { BranchTimeline } from './BranchTimeline'
+import { ContributorGraph } from './ContributorGraph'
 
 interface LocalRepositoryViewProps {
   branches: GitHubBranch[]
@@ -85,6 +88,13 @@ export function LocalRepositoryView({
 
       <BackendStatus dataSource={dataSource} />
       <CommitFrequencyChart />
+
+      {/* D3.js Visualizations */}
+      <div className="space-y-6">
+        <CommitHistoryGraph commits={commits} branches={branches} />
+        <BranchTimeline commits={commits} branches={branches} />
+        <ContributorGraph commits={commits} />
+      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         <LocalActivityLog commits={commits} />
