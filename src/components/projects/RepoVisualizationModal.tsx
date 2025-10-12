@@ -1572,8 +1572,8 @@ export function RepoVisualizationModal({ isOpen, onClose, project }: RepoVisuali
                 </div>
               )}
 
-              {/* Legacy Git Graph Tab - keeping for reference */}
-              {false && activeTab === 'branches' && (
+              {/* Legacy sections removed - only Local and Remote tabs are active */}
+              {false && (
                 <div className="space-y-6">
                   {/* Header */}
                   <div className="flex items-center justify-between border-b border-gray-800 pb-4">
@@ -1724,8 +1724,8 @@ export function RepoVisualizationModal({ isOpen, onClose, project }: RepoVisuali
                 </div>
               )}
 
-              {/* Team Status Tab */}
-              {activeTab === 'users' && (
+              {/* Legacy Team Status Tab - removed */}
+              {false && (
                 <div className="space-y-6">
                   {/* Header */}
                   <div className="flex items-center justify-between border-b border-gray-800 pb-4">
