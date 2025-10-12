@@ -7,7 +7,7 @@ import { LocalBranchList } from './LocalBranchList'
 import { RecentActivity } from './RecentActivity'
 import { LocalActivityLog } from './LocalActivityLog'
 import { TeamStatus } from './TeamStatus'
-import { CommitHistoryGraph } from './CommitHistoryGraph'
+import { CommitBubbles } from './CommitBubbles'
 import { BranchTimeline } from './BranchTimeline'
 import { ContributorGraph } from './ContributorGraph'
 
@@ -87,14 +87,15 @@ export function LocalRepositoryView({
       </div>
 
       <BackendStatus dataSource={dataSource} />
-      <CommitFrequencyChart />
 
-      {/* D3.js Visualizations */}
+      {/* D3.js Circle Pack Visualization */}
       <div className="space-y-6">
-        <CommitHistoryGraph commits={commits} branches={branches} />
+        <CommitBubbles commits={commits} />
         <BranchTimeline commits={commits} branches={branches} />
         <ContributorGraph commits={commits} />
       </div>
+
+      <CommitFrequencyChart />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         <LocalActivityLog commits={commits} />

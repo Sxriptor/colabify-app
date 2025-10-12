@@ -15,6 +15,8 @@ interface CommitNode extends d3.SimulationNodeDatum {
   branch?: string
   parents: string[]
   children: string[]
+  additions?: number
+  deletions?: number
 }
 
 interface CommitLink extends d3.SimulationLinkDatum<CommitNode> {
@@ -30,7 +32,7 @@ interface CommitHistoryGraphProps {
 export function CommitHistoryGraph({ commits, branches = [] }: CommitHistoryGraphProps) {
   const svgRef = useRef<SVGSVGElement>(null)
   const [selectedCommit, setSelectedCommit] = useState<CommitNode | null>(null)
-  const [dimensions, setDimensions] = useState({ width: 1200, height: 600 })
+  const [dimensions, setDimensions] = useState({ width: 1200, height: 700 })
 
   useEffect(() => {
     if (!svgRef.current || commits.length === 0) return
@@ -39,11 +41,11 @@ export function CommitHistoryGraph({ commits, branches = [] }: CommitHistoryGrap
     svg.selectAll('*').remove()
 
     const { width, height } = dimensions
-    const margin = { top: 20, right: 20, bottom: 20, left: 20 }
+    const margin = { top: 40, right: 40, bottom: 40, left: 40 }
     const innerWidth = width - margin.left - margin.right
     const innerHeight = height - margin.top - margin.bottom
 
-    // Create commit nodes
+    // Create commit nodes with activity data
     const nodes: CommitNode[] = commits.map((commit, index) => ({
       id: commit.sha,
       sha: commit.sha,
@@ -54,6 +56,8 @@ export function CommitHistoryGraph({ commits, branches = [] }: CommitHistoryGrap
       avatar: commit.author?.avatar_url,
       parents: [],
       children: [],
+      additions: commit.stats?.additions || 0,
+      deletions: commit.stats?.deletions || 0,
       x: 0,
       y: 0
     }))
@@ -80,42 +84,82 @@ export function CommitHistoryGraph({ commits, branches = [] }: CommitHistoryGrap
       .append('g')
       .attr('transform', `translate(${margin.left},${margin.top})`)
 
-    // Add grid pattern
+    // Add definitions for gradients and filters
     const defs = svg.append('defs')
+    
+    // Glow filter for nodes
+    const filter = defs.append('filter')
+      .attr('id', 'glow')
+      .attr('x', '-50%')
+      .attr('y', '-50%')
+      .attr('width', '200%')
+      .attr('height', '200%')
+
+    filter.append('feGaussianBlur')
+      .attr('stdDeviation', '3')
+      .attr('result', 'coloredBlur')
+
+    const feMerge = filter.append('feMerge')
+    feMerge.append('feMergeNode').attr('in', 'coloredBlur')
+    feMerge.append('feMergeNode').attr('in', 'SourceGraphic')
+
+    // Gradient for links
+    const linkGradient = defs.append('linearGradient')
+      .attr('id', 'linkGradient')
+      .attr('gradientUnits', 'userSpaceOnUse')
+
+    linkGradient.append('stop')
+      .attr('offset', '0%')
+      .attr('stop-color', '#00e0ff')
+      .attr('stop-opacity', 0.6)
+
+    linkGradient.append('stop')
+      .attr('offset', '100%')
+      .attr('stop-color', '#a855f7')
+      .attr('stop-opacity', 0.3)
+
+    // Organic grid pattern
     const pattern = defs.append('pattern')
-      .attr('id', 'grid')
-      .attr('width', 20)
-      .attr('height', 20)
+      .attr('id', 'organicGrid')
+      .attr('width', 40)
+      .attr('height', 40)
       .attr('patternUnits', 'userSpaceOnUse')
 
-    pattern.append('path')
-      .attr('d', 'M 20 0 L 0 0 0 20')
-      .attr('fill', 'none')
-      .attr('stroke', '#1f2937')
-      .attr('stroke-width', 0.5)
+    pattern.append('circle')
+      .attr('cx', 20)
+      .attr('cy', 20)
+      .attr('r', 0.5)
+      .attr('fill', '#1a1f2e')
+      .attr('opacity', 0.3)
 
     g.append('rect')
       .attr('width', innerWidth)
       .attr('height', innerHeight)
-      .attr('fill', 'url(#grid)')
+      .attr('fill', 'url(#organicGrid)')
 
-    // Create force simulation
+    // Create force simulation with organic movement
     const simulation = d3.forceSimulation(nodes)
       .force('link', d3.forceLink<CommitNode, CommitLink>(links)
         .id(d => d.id)
-        .distance(100))
-      .force('charge', d3.forceManyBody().strength(-300))
+        .distance(120)
+        .strength(0.5))
+      .force('charge', d3.forceManyBody().strength(-400))
       .force('center', d3.forceCenter(innerWidth / 2, innerHeight / 2))
-      .force('collision', d3.forceCollide().radius(30))
+      .force('collision', d3.forceCollide().radius(40))
+      .alphaDecay(0.02)
 
-    // Draw links
+    // Draw links with bezier curves
     const link = g.append('g')
-      .selectAll('line')
+      .selectAll('path')
       .data(links)
-      .join('line')
-      .attr('stroke', '#4b5563')
+      .join('path')
+      .attr('stroke', 'url(#linkGradient)')
       .attr('stroke-width', 2)
-      .attr('stroke-opacity', 0.6)
+      .attr('fill', 'none')
+      .attr('opacity', 0)
+      .transition()
+      .duration(2000)
+      .attr('opacity', 0.6)
 
     // Draw nodes
     const node = g.append('g')
@@ -123,57 +167,151 @@ export function CommitHistoryGraph({ commits, branches = [] }: CommitHistoryGrap
       .data(nodes)
       .join('g')
       .attr('cursor', 'pointer')
+      .attr('opacity', 0)
       .call(d3.drag<SVGGElement, CommitNode>()
         .on('start', dragstarted)
         .on('drag', dragged)
         .on('end', dragended) as any)
 
-    // Node circles
+    // Animate nodes in
+    node.transition()
+      .delay((d, i) => i * 50)
+      .duration(1000)
+      .attr('opacity', 1)
+
+    // Node outer glow circle
     node.append('circle')
-      .attr('r', 8)
-      .attr('fill', '#3b82f6')
-      .attr('stroke', '#1e40af')
+      .attr('r', 0)
+      .attr('fill', 'none')
+      .attr('stroke', d => {
+        const activity = (d.additions || 0) + (d.deletions || 0)
+        return activity > 100 ? '#a855f7' : activity > 50 ? '#00e0ff' : '#22c55e'
+      })
       .attr('stroke-width', 2)
+      .attr('opacity', 0.3)
+      .transition()
+      .duration(1500)
+      .attr('r', 20)
 
-    // Node labels
+    // Node main circle
+    node.append('circle')
+      .attr('r', 0)
+      .attr('fill', d => {
+        const activity = (d.additions || 0) + (d.deletions || 0)
+        return activity > 100 ? '#a855f7' : activity > 50 ? '#00e0ff' : '#22c55e'
+      })
+      .attr('stroke', d => {
+        const activity = (d.additions || 0) + (d.deletions || 0)
+        return activity > 100 ? '#7c3aed' : activity > 50 ? '#0891b2' : '#16a34a'
+      })
+      .attr('stroke-width', 2)
+      .attr('filter', 'url(#glow)')
+      .transition()
+      .duration(1000)
+      .attr('r', d => {
+        const activity = (d.additions || 0) + (d.deletions || 0)
+        return activity > 100 ? 12 : activity > 50 ? 10 : 8
+      })
+
+    // Node labels with fade in
     node.append('text')
-      .text(d => d.message.substring(0, 30) + (d.message.length > 30 ? '...' : ''))
-      .attr('x', 12)
+      .text(d => d.message.substring(0, 25) + (d.message.length > 25 ? '...' : ''))
+      .attr('x', 18)
       .attr('y', 4)
-      .attr('font-size', '10px')
-      .attr('fill', '#9ca3af')
-      .attr('font-family', 'monospace')
+      .attr('font-size', '11px')
+      .attr('fill', '#94a3b8')
+      .attr('font-family', 'ui-monospace, monospace')
+      .attr('opacity', 0)
+      .transition()
+      .delay(1000)
+      .duration(800)
+      .attr('opacity', 0.8)
 
-    // Update positions on simulation tick
+    // Update positions on simulation tick with smooth bezier curves
     simulation.on('tick', () => {
-      link
-        .attr('x1', d => (d.source as CommitNode).x!)
-        .attr('y1', d => (d.source as CommitNode).y!)
-        .attr('x2', d => (d.target as CommitNode).x!)
-        .attr('y2', d => (d.target as CommitNode).y!)
+      link.attr('d', d => {
+        const source = d.source as CommitNode
+        const target = d.target as CommitNode
+        const dx = target.x! - source.x!
+        const dy = target.y! - source.y!
+        const dr = Math.sqrt(dx * dx + dy * dy) * 1.5
+        return `M${source.x},${source.y}A${dr},${dr} 0 0,1 ${target.x},${target.y}`
+      })
 
       node.attr('transform', d => `translate(${d.x},${d.y})`)
     })
 
-    // Node interactions
+    // Node interactions with smooth animations
     node.on('click', (event, d) => {
       setSelectedCommit(d)
+      
+      // Pulse effect on click
+      d3.select(event.currentTarget)
+        .select('circle:nth-child(2)')
+        .transition()
+        .duration(300)
+        .attr('r', d => {
+          const activity = (d.additions || 0) + (d.deletions || 0)
+          return activity > 100 ? 16 : activity > 50 ? 14 : 12
+        })
+        .transition()
+        .duration(300)
+        .attr('r', d => {
+          const activity = (d.additions || 0) + (d.deletions || 0)
+          return activity > 100 ? 12 : activity > 50 ? 10 : 8
+        })
     })
 
-    node.on('mouseenter', function(event, d) {
-      d3.select(this).select('circle')
+    node.on('mouseenter', function(event, d: CommitNode) {
+      // Grow main circle
+      d3.select(this).select('circle:nth-child(2)')
         .transition()
-        .duration(200)
-        .attr('r', 12)
-        .attr('fill', '#60a5fa')
+        .duration(400)
+        .ease(d3.easeElastic)
+        .attr('r', () => {
+          const activity = (d.additions || 0) + (d.deletions || 0)
+          return activity > 100 ? 16 : activity > 50 ? 14 : 12
+        })
+
+      // Brighten glow
+      d3.select(this).select('circle:nth-child(1)')
+        .transition()
+        .duration(400)
+        .attr('opacity', 0.6)
+        .attr('r', 28)
+
+      // Brighten label
+      d3.select(this).select('text')
+        .transition()
+        .duration(300)
+        .attr('opacity', 1)
+        .attr('fill', '#e2e8f0')
     })
 
-    node.on('mouseleave', function(event, d) {
-      d3.select(this).select('circle')
+    node.on('mouseleave', function(event, d: CommitNode) {
+      // Return to normal size
+      d3.select(this).select('circle:nth-child(2)')
         .transition()
-        .duration(200)
-        .attr('r', 8)
-        .attr('fill', '#3b82f6')
+        .duration(400)
+        .ease(d3.easeElastic)
+        .attr('r', () => {
+          const activity = (d.additions || 0) + (d.deletions || 0)
+          return activity > 100 ? 12 : activity > 50 ? 10 : 8
+        })
+
+      // Dim glow
+      d3.select(this).select('circle:nth-child(1)')
+        .transition()
+        .duration(400)
+        .attr('opacity', 0.3)
+        .attr('r', 20)
+
+      // Dim label
+      d3.select(this).select('text')
+        .transition()
+        .duration(300)
+        .attr('opacity', 0.8)
+        .attr('fill', '#94a3b8')
     })
 
     function dragstarted(event: any, d: CommitNode) {
@@ -199,20 +337,36 @@ export function CommitHistoryGraph({ commits, branches = [] }: CommitHistoryGrap
   }, [commits, dimensions])
 
   return (
-    <div className="border border-gray-800 bg-black">
-      <div className="border-b border-gray-800 p-4 flex items-center justify-between">
+    <div className="border border-gray-800/50 bg-gradient-to-br from-[#050509] via-[#0a0f1a] to-[#050509] rounded-lg overflow-hidden">
+      <div className="border-b border-gray-800/50 p-5 flex items-center justify-between bg-black/40 backdrop-blur-sm">
         <div>
-          <h3 className="text-white font-mono text-sm">COMMIT.HISTORY.GRAPH</h3>
-          <p className="text-gray-400 font-mono text-xs">
-            Interactive D3.js visualization • {commits.length} commits
+          <h3 className="text-transparent bg-clip-text bg-gradient-to-r from-[#00e0ff] to-[#a855f7] font-mono text-sm font-semibold tracking-wide">
+            COMMIT HISTORY GARDEN
+          </h3>
+          <p className="text-gray-500 font-mono text-xs mt-1">
+            {commits.length} commits • Interactive force-directed graph
           </p>
         </div>
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center space-x-3">
+          <div className="flex items-center space-x-2 text-xs font-mono">
+            <div className="flex items-center space-x-1">
+              <div className="w-2 h-2 rounded-full bg-[#22c55e]"></div>
+              <span className="text-gray-500">Small</span>
+            </div>
+            <div className="flex items-center space-x-1">
+              <div className="w-2 h-2 rounded-full bg-[#00e0ff]"></div>
+              <span className="text-gray-500">Medium</span>
+            </div>
+            <div className="flex items-center space-x-1">
+              <div className="w-2 h-2 rounded-full bg-[#a855f7]"></div>
+              <span className="text-gray-500">Large</span>
+            </div>
+          </div>
           <button
-            onClick={() => setDimensions({ width: 1200, height: 600 })}
-            className="px-3 py-1 bg-gray-900 text-gray-300 font-mono text-xs hover:bg-gray-800 border border-gray-700"
+            onClick={() => setDimensions({ width: 1200, height: 700 })}
+            className="px-3 py-1.5 bg-gray-900/50 text-gray-400 font-mono text-xs hover:bg-gray-800/50 hover:text-gray-300 border border-gray-700/50 rounded transition-all duration-300"
           >
-            RESET.VIEW
+            RESET VIEW
           </button>
         </div>
       </div>
@@ -222,40 +376,53 @@ export function CommitHistoryGraph({ commits, branches = [] }: CommitHistoryGrap
           ref={svgRef}
           width={dimensions.width}
           height={dimensions.height}
-          className="bg-black"
+          className="bg-gradient-to-br from-[#050509] via-[#0a0f1a] to-[#050509]"
         />
 
         {selectedCommit && (
-          <div className="absolute top-4 right-4 bg-gray-900 border border-gray-700 p-4 max-w-md">
-            <div className="flex items-center justify-between mb-3">
-              <h4 className="text-white font-mono text-xs">COMMIT.DETAILS</h4>
+          <div className="absolute top-6 right-6 bg-gradient-to-br from-gray-900/95 to-gray-950/95 backdrop-blur-md border border-gray-700/50 rounded-lg p-5 max-w-md shadow-2xl animate-in fade-in slide-in-from-right-4 duration-300">
+            <div className="flex items-center justify-between mb-4">
+              <h4 className="text-transparent bg-clip-text bg-gradient-to-r from-[#00e0ff] to-[#a855f7] font-mono text-xs font-semibold tracking-wide">
+                COMMIT DETAILS
+              </h4>
               <button
                 onClick={() => setSelectedCommit(null)}
-                className="text-gray-400 hover:text-white"
+                className="text-gray-500 hover:text-gray-300 transition-colors duration-200"
               >
-                ✕
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
               </button>
             </div>
-            <div className="space-y-2 text-xs font-mono">
-              <div>
-                <span className="text-gray-400">SHA:</span>
-                <span className="text-white ml-2">{selectedCommit.sha.substring(0, 8)}</span>
+            <div className="space-y-3 text-xs font-mono">
+              <div className="flex items-start space-x-2">
+                <span className="text-gray-500 min-w-[60px]">SHA:</span>
+                <span className="text-[#00e0ff] font-semibold">{selectedCommit.sha.substring(0, 8)}</span>
               </div>
-              <div>
-                <span className="text-gray-400">Author:</span>
-                <span className="text-white ml-2">{selectedCommit.author}</span>
+              <div className="flex items-start space-x-2">
+                <span className="text-gray-500 min-w-[60px]">Author:</span>
+                <span className="text-gray-300">{selectedCommit.author}</span>
               </div>
-              <div>
-                <span className="text-gray-400">Email:</span>
-                <span className="text-white ml-2">{selectedCommit.email}</span>
+              <div className="flex items-start space-x-2">
+                <span className="text-gray-500 min-w-[60px]">Email:</span>
+                <span className="text-gray-400 text-[10px]">{selectedCommit.email}</span>
               </div>
-              <div>
-                <span className="text-gray-400">Date:</span>
-                <span className="text-white ml-2">{selectedCommit.date.toLocaleString()}</span>
+              <div className="flex items-start space-x-2">
+                <span className="text-gray-500 min-w-[60px]">Date:</span>
+                <span className="text-gray-400">{selectedCommit.date.toLocaleString()}</span>
               </div>
-              <div>
-                <span className="text-gray-400">Message:</span>
-                <p className="text-white mt-1">{selectedCommit.message}</p>
+              {(selectedCommit.additions || selectedCommit.deletions) && (
+                <div className="flex items-start space-x-2">
+                  <span className="text-gray-500 min-w-[60px]">Changes:</span>
+                  <div className="flex items-center space-x-2">
+                    <span className="text-[#22c55e]">+{selectedCommit.additions || 0}</span>
+                    <span className="text-[#ef4444]">-{selectedCommit.deletions || 0}</span>
+                  </div>
+                </div>
+              )}
+              <div className="pt-2 border-t border-gray-800/50">
+                <span className="text-gray-500 block mb-1">Message:</span>
+                <p className="text-gray-300 leading-relaxed">{selectedCommit.message}</p>
               </div>
             </div>
           </div>

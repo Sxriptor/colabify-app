@@ -90,80 +90,151 @@ export function ContributorGraph({ commits }: ContributorGraphProps) {
       .attr('font-family', 'monospace')
       .attr('font-size', '10px')
 
-    // Add bars
+    // Add definitions for gradients and filters
+    const defs = svg.append('defs')
+    
+    // Glow filter
+    const filter = defs.append('filter')
+      .attr('id', 'barGlow')
+      .attr('x', '-50%')
+      .attr('y', '-50%')
+      .attr('width', '200%')
+      .attr('height', '200%')
+
+    filter.append('feGaussianBlur')
+      .attr('stdDeviation', '3')
+      .attr('result', 'coloredBlur')
+
+    const feMerge = filter.append('feMerge')
+    feMerge.append('feMergeNode').attr('in', 'coloredBlur')
+    feMerge.append('feMergeNode').attr('in', 'SourceGraphic')
+
+    // Gradient for bars
+    const barGradient = defs.append('linearGradient')
+      .attr('id', 'barGradient')
+      .attr('x1', '0%')
+      .attr('y1', '100%')
+      .attr('x2', '0%')
+      .attr('y2', '0%')
+
+    barGradient.append('stop')
+      .attr('offset', '0%')
+      .attr('stop-color', '#0891b2')
+      .attr('stop-opacity', 0.8)
+
+    barGradient.append('stop')
+      .attr('offset', '100%')
+      .attr('stop-color', '#00e0ff')
+      .attr('stop-opacity', 1)
+
+    // Add bars with animation
     g.selectAll('rect')
       .data(data)
       .join('rect')
       .attr('x', d => xScale(d.name)!)
-      .attr('y', d => yScale(d.commits))
+      .attr('y', innerHeight)
       .attr('width', xScale.bandwidth())
-      .attr('height', d => innerHeight - yScale(d.commits))
-      .attr('fill', '#3b82f6')
+      .attr('height', 0)
+      .attr('fill', 'url(#barGradient)')
+      .attr('filter', 'url(#barGlow)')
       .attr('cursor', 'pointer')
+      .attr('rx', 4)
+      .transition()
+      .delay((d, i) => i * 100)
+      .duration(1000)
+      .ease(d3.easeElastic)
+      .attr('y', d => yScale(d.commits))
+      .attr('height', d => innerHeight - yScale(d.commits))
+      .selection()
       .on('mouseenter', function(event, d) {
         d3.select(this)
           .transition()
-          .duration(200)
+          .duration(300)
           .attr('fill', '#60a5fa')
+          .attr('filter', 'url(#barGlow) brightness(1.2)')
 
-        // Show tooltip
+        // Show tooltip with fade in
         const tooltip = g.append('g')
           .attr('class', 'tooltip')
-          .attr('transform', `translate(${xScale(d.name)! + xScale.bandwidth() / 2},${yScale(d.commits) - 10})`)
+          .attr('transform', `translate(${xScale(d.name)! + xScale.bandwidth() / 2},${yScale(d.commits) - 20})`)
+          .attr('opacity', 0)
 
         tooltip.append('rect')
-          .attr('x', -80)
-          .attr('y', -60)
-          .attr('width', 160)
-          .attr('height', 55)
-          .attr('fill', '#1f2937')
-          .attr('stroke', '#4b5563')
+          .attr('x', -90)
+          .attr('y', -75)
+          .attr('width', 180)
+          .attr('height', 70)
+          .attr('fill', '#0f172a')
+          .attr('stroke', '#334155')
+          .attr('stroke-width', 1)
+          .attr('rx', 8)
+          .attr('filter', 'url(#barGlow)')
 
         tooltip.append('text')
           .attr('text-anchor', 'middle')
-          .attr('y', -40)
-          .attr('fill', '#fff')
-          .attr('font-family', 'monospace')
-          .attr('font-size', '11px')
+          .attr('y', -52)
+          .attr('fill', '#e2e8f0')
+          .attr('font-family', 'ui-monospace, monospace')
+          .attr('font-size', '12px')
+          .attr('font-weight', '600')
           .text(d.name)
 
         tooltip.append('text')
           .attr('text-anchor', 'middle')
-          .attr('y', -25)
-          .attr('fill', '#9ca3af')
-          .attr('font-family', 'monospace')
-          .attr('font-size', '9px')
+          .attr('y', -35)
+          .attr('fill', '#00e0ff')
+          .attr('font-family', 'ui-monospace, monospace')
+          .attr('font-size', '10px')
           .text(`${d.commits} commits`)
 
         tooltip.append('text')
           .attr('text-anchor', 'middle')
-          .attr('y', -12)
+          .attr('y', -20)
           .attr('fill', '#22c55e')
-          .attr('font-family', 'monospace')
+          .attr('font-family', 'ui-monospace, monospace')
           .attr('font-size', '9px')
           .text(`+${d.additions} additions`)
+
+        tooltip.append('text')
+          .attr('text-anchor', 'middle')
+          .attr('y', -8)
+          .attr('fill', '#ef4444')
+          .attr('font-family', 'ui-monospace, monospace')
+          .attr('font-size', '9px')
+          .text(`-${d.deletions} deletions`)
+
+        tooltip.transition()
+          .duration(200)
+          .attr('opacity', 1)
       })
       .on('mouseleave', function() {
         d3.select(this)
           .transition()
-          .duration(200)
-          .attr('fill', '#3b82f6')
+          .duration(300)
+          .attr('fill', 'url(#barGradient)')
+          .attr('filter', 'url(#barGlow)')
 
-        g.selectAll('.tooltip').remove()
+        g.selectAll('.tooltip')
+          .transition()
+          .duration(150)
+          .attr('opacity', 0)
+          .remove()
       })
 
   }, [commits])
 
   return (
-    <div className="border border-gray-800 bg-black">
-      <div className="border-b border-gray-800 p-4">
-        <h3 className="text-white font-mono text-sm">CONTRIBUTOR.ACTIVITY</h3>
-        <p className="text-gray-400 font-mono text-xs">
-          Commits per contributor
+    <div className="border border-gray-800/50 bg-gradient-to-br from-[#050509] via-[#0a0f1a] to-[#050509] rounded-lg overflow-hidden">
+      <div className="border-b border-gray-800/50 p-5 bg-black/40 backdrop-blur-sm">
+        <h3 className="text-transparent bg-clip-text bg-gradient-to-r from-[#00e0ff] to-[#0891b2] font-mono text-sm font-semibold tracking-wide">
+          CONTRIBUTOR ACTIVITY
+        </h3>
+        <p className="text-gray-500 font-mono text-xs mt-1">
+          Code contributions by team member
         </p>
       </div>
-      <div className="p-4">
-        <svg ref={svgRef} width={1200} height={400} className="bg-black" />
+      <div className="p-6">
+        <svg ref={svgRef} width={1200} height={420} className="bg-gradient-to-br from-[#050509] via-[#0a0f1a] to-[#050509]" />
       </div>
     </div>
   )
