@@ -19,7 +19,7 @@ export function TeamStatus({ localUsers }: TeamStatusProps) {
       <div className="p-4 h-80 overflow-y-auto">
         <div className="font-mono text-xs space-y-3">
           {localUsers.map((userLoc, index) => (
-            <div key={userLoc.userId} className="border-l-2 border-gray-700 pl-4">
+            <div key={`${userLoc.userId}-${userLoc.localPath}-${index}`} className="border-l-2 border-gray-700 pl-4">
               <div className="flex items-center justify-between mb-1">
                 <div className="flex items-center space-x-2">
                   <div className={`w-2 h-2 ${userLoc.status === 'online' ? 'bg-green-400' :

@@ -142,7 +142,7 @@ export function FloatingActionMenu() {
 
   return (
     <>
-      <div className="fixed bottom-6 right-6 z-50">
+      <div className="fixed bottom-6 right-6 z-[60]">
         <div className="bg-gray-800 rounded-lg shadow-lg p-2 flex flex-col gap-1">
           {/* Back to Dashboard Button - Show on all pages except dashboard */}
           {!isDashboard && (
