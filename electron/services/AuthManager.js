@@ -9,7 +9,8 @@ class AuthManager {
     this.authPromise = null;
     this.serviceName = 'DevPulse';
     this.accountName = 'auth-token';
-    this.githubAccountName = 'github-token'; // Separate storage for GitHub token
+    this.githubAccountName = 'github-token'; // OAuth token from GitHub
+    this.userPATAccountName = 'user-github-pat'; // User-provided Personal Access Token
     this.cachedUser = null; // Cache user data to avoid repeated API calls
     this.userCacheExpiry = null; // Cache expiry time
     this.cacheValidityMs = 5 * 60 * 1000; // Cache for 5 minutes
@@ -388,6 +389,65 @@ class AuthManager {
   }
 
   /**
+   * Store user-provided Personal Access Token
+   */
+  async saveUserProvidedPAT(pat) {
+    try {
+      const patData = {
+        token: pat,
+        storedAt: Date.now()
+      };
+
+      await keytar.setPassword(this.serviceName, this.userPATAccountName, JSON.stringify(patData));
+      console.log('🔐 User-provided PAT stored securely');
+    } catch (error) {
+      console.error('Error storing user PAT:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Retrieve user-provided Personal Access Token
+   */
+  async getUserProvidedPAT() {
+    try {
+      const stored = await keytar.getPassword(this.serviceName, this.userPATAccountName);
+      if (!stored) {
+        console.log('ℹ️ No user-provided PAT found in storage');
+        return null;
+      }
+
+      const patData = JSON.parse(stored);
+      console.log('✅ User-provided PAT retrieved from storage');
+      return patData.token;
+    } catch (error) {
+      console.error('Error retrieving user PAT:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Remove user-provided Personal Access Token
+   */
+  async removeUserProvidedPAT() {
+    try {
+      await keytar.deletePassword(this.serviceName, this.userPATAccountName);
+      console.log('🗑️ User-provided PAT cleared from secure storage');
+    } catch (error) {
+      console.error('Error clearing user PAT:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Check if user-provided PAT is available
+   */
+  async hasUserProvidedPAT() {
+    const pat = await this.getUserProvidedPAT();
+    return !!pat;
+  }
+
+  /**
    * Begin external sign-in process
    */
   async beginExternalSignIn() {
@@ -493,6 +553,8 @@ class AuthManager {
     this.clearUserCache();
     await this.clearStoredToken();
     await this.clearStoredGitHubToken();
+    // Note: We keep the user-provided PAT even after logout
+    // This is intentional - it's a user configuration that persists
     console.log('👋 User signed out');
   }
 

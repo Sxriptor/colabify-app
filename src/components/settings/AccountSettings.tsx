@@ -27,9 +27,111 @@ export function AccountSettings() {
     notification_preference: 'instant' as 'instant' | 'digest'
   })
 
+  // GitHub PAT state
+  const [githubPAT, setGithubPAT] = useState('')
+  const [showPAT, setShowPAT] = useState(false)
+  const [hasPAT, setHasPAT] = useState(false)
+  const [patSaving, setPatSaving] = useState(false)
+  const [patSuccess, setPatSuccess] = useState<string | null>(null)
+
   useEffect(() => {
     fetchSettings()
+    checkExistingPAT()
   }, [])
+
+  const checkExistingPAT = async () => {
+    // Check if we're in Electron
+    const isElectron = typeof window !== 'undefined' && (window as any).electronAPI
+
+    if (isElectron) {
+      try {
+        const electronAPI = (window as any).electronAPI
+        if (electronAPI && electronAPI.hasUserPAT) {
+          const hasPat = await electronAPI.hasUserPAT()
+          setHasPAT(hasPat)
+          if (hasPat) {
+            console.log('✅ User-provided PAT is configured')
+          } else {
+            console.log('ℹ️ No user-provided PAT found')
+          }
+        }
+      } catch (error) {
+        console.error('Error checking PAT:', error)
+      }
+    }
+  }
+
+  const handleSavePAT = async () => {
+    if (!githubPAT.trim()) {
+      setError('Please enter a GitHub Personal Access Token')
+      return
+    }
+
+    setPatSaving(true)
+    setError(null)
+    setPatSuccess(null)
+
+    try {
+      // Check if we're in Electron
+      const isElectron = typeof window !== 'undefined' && (window as any).electronAPI
+
+      if (!isElectron) {
+        throw new Error('GitHub PAT can only be saved in the Electron app')
+      }
+
+      // Validate the token by making a test request
+      const testResponse = await fetch('https://api.github.com/user', {
+        headers: {
+          'Authorization': `Bearer ${githubPAT}`,
+          'Accept': 'application/vnd.github.v3+json'
+        }
+      })
+
+      if (!testResponse.ok) {
+        throw new Error('Invalid GitHub token. Please check your token and try again.')
+      }
+
+      const userData = await testResponse.json()
+
+      // Save to Electron secure storage
+      const electronAPI = (window as any).electronAPI
+      const result = await electronAPI.invoke('auth:save-github-token', githubPAT)
+
+      if (result.success) {
+        setHasPAT(true)
+        setGithubPAT('')
+        setPatSuccess(`Token validated and saved! Authenticated as ${userData.login}`)
+        setTimeout(() => setPatSuccess(null), 5000)
+      } else {
+        throw new Error('Failed to save token')
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save token')
+    } finally {
+      setPatSaving(false)
+    }
+  }
+
+  const handleRemovePAT = async () => {
+    if (!confirm('Are you sure you want to remove your GitHub Personal Access Token?')) {
+      return
+    }
+
+    try {
+      const isElectron = typeof window !== 'undefined' && (window as any).electronAPI
+      if (!isElectron) return
+
+      const electronAPI = (window as any).electronAPI
+      await electronAPI.invoke('auth:remove-github-token')
+
+      setHasPAT(false)
+      setGithubPAT('')
+      setPatSuccess('GitHub token removed successfully')
+      setTimeout(() => setPatSuccess(null), 3000)
+    } catch (err) {
+      setError('Failed to remove token')
+    }
+  }
 
   const fetchSettings = async () => {
     try {
@@ -210,6 +312,99 @@ export function AccountSettings() {
             </button>
           </div>
         </form>
+      </div>
+
+      {/* API Personal Access Token */}
+      <div className="bg-white shadow rounded-lg">
+        <div className="px-6 py-4 border-b border-gray-200">
+          <h3 className="text-lg font-medium text-gray-900">API Personal Access Token</h3>
+          <p className="text-sm text-gray-500 mt-1">Required to access private repositories and GitHub API features</p>
+        </div>
+        <div className="p-6 space-y-4">
+          {patSuccess && (
+            <div className="rounded-md bg-green-50 border border-green-200 p-4">
+              <div className="text-sm text-green-800">{patSuccess}</div>
+            </div>
+          )}
+
+          {hasPAT ? (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between p-4 bg-green-50 border border-green-200 rounded-md">
+                <div className="flex items-center gap-3">
+                  <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                  <div>
+                    <div className="text-sm font-medium text-gray-900">API Token Configured</div>
+                    <div className="text-xs text-gray-500">Your private repositories and API features are accessible</div>
+                  </div>
+                </div>
+                <button
+                  onClick={handleRemovePAT}
+                  className="text-red-600 hover:text-red-700 text-sm font-medium"
+                >
+                  Remove Token
+                </button>
+              </div>
+              <div className="text-sm text-gray-600">
+                <p>✅ Token is active and will be used for GitHub API requests</p>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="bg-blue-50 border border-blue-200 rounded-md p-4">
+                <h4 className="text-sm font-medium text-blue-900 mb-2">How to create an API Personal Access Token:</h4>
+                <ol className="text-sm text-blue-800 space-y-1 list-decimal list-inside">
+                  <li>Go to <a href="https://github.com/settings/tokens" target="_blank" rel="noopener noreferrer" className="underline">GitHub Settings → Personal Access Tokens (Classic)</a></li>
+                  <li>Click "Generate new token (classic)"</li>
+                  <li>Give it a name (e.g., "DevPulse API")</li>
+                  <li>Select the <strong>repo</strong> scope (full control of private repositories)</li>
+                  <li>Click "Generate token" and copy it</li>
+                </ol>
+              </div>
+
+              <div>
+                <label htmlFor="github-pat" className="block text-sm font-medium text-gray-700 mb-2">
+                  Personal Access Token (Classic)
+                </label>
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <input
+                      type={showPAT ? "text" : "password"}
+                      id="github-pat"
+                      value={githubPAT}
+                      onChange={(e) => setGithubPAT(e.target.value)}
+                      placeholder="ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-gray-500 focus:border-transparent font-mono text-sm"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPAT(!showPAT)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    >
+                      {showPAT ? '🙈' : '👁️'}
+                    </button>
+                  </div>
+                  <button
+                    onClick={handleSavePAT}
+                    disabled={patSaving || !githubPAT.trim()}
+                    className="bg-gray-800 hover:bg-gray-900 disabled:bg-gray-400 text-white px-6 py-2 rounded-md text-sm font-medium transition-colors duration-200 flex items-center gap-2"
+                  >
+                    {patSaving ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                        Validating...
+                      </>
+                    ) : (
+                      'Save Token'
+                    )}
+                  </button>
+                </div>
+                <p className="mt-2 text-xs text-gray-500">
+                  ⚠️ Your token is stored securely and never sent to our servers. It's only used locally for GitHub API requests.
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Notification Settings */}

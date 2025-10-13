@@ -273,7 +273,18 @@ ipcMain.handle('auth:logout', async () => {
 // GitHub token management
 ipcMain.handle('auth:get-github-token', async () => {
   try {
+    // First try to get user-provided PAT
+    const userPAT = await authManager.getUserProvidedPAT();
+    if (userPAT) {
+      console.log('✅ Using user-provided PAT');
+      return userPAT;
+    }
+
+    // Fall back to OAuth token
     const token = await authManager.getStoredGitHubToken();
+    if (token) {
+      console.log('✅ Using OAuth token');
+    }
     return token;
   } catch (error) {
     console.error('Error getting GitHub token:', error);
@@ -286,6 +297,40 @@ ipcMain.handle('auth:has-github-token', async () => {
     return await authManager.hasGitHubToken();
   } catch (error) {
     console.error('Error checking GitHub token:', error);
+    return false;
+  }
+});
+
+// User-provided PAT management
+ipcMain.handle('auth:save-github-token', async (event, token) => {
+  try {
+    console.log('💾 Saving user-provided GitHub PAT...');
+    await authManager.saveUserProvidedPAT(token);
+    console.log('✅ PAT saved successfully');
+    return { success: true };
+  } catch (error) {
+    console.error('❌ Error saving PAT:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('auth:remove-github-token', async () => {
+  try {
+    console.log('🗑️ Removing user-provided GitHub PAT...');
+    await authManager.removeUserProvidedPAT();
+    console.log('✅ PAT removed successfully');
+    return { success: true };
+  } catch (error) {
+    console.error('❌ Error removing PAT:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('auth:has-user-pat', async () => {
+  try {
+    return await authManager.hasUserProvidedPAT();
+  } catch (error) {
+    console.error('Error checking user PAT:', error);
     return false;
   }
 });
