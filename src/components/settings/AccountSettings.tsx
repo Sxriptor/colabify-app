@@ -95,15 +95,23 @@ export function AccountSettings() {
 
       // Save to Electron secure storage
       const electronAPI = (window as any).electronAPI
+      console.log('💾 Saving token to Electron...')
       const result = await electronAPI.invoke('auth:save-github-token', githubPAT)
+      console.log('💾 Save result:', result)
 
       if (result.success) {
-        setHasPAT(true)
+        console.log('✅ Token saved successfully, updating UI...')
         setGithubPAT('')
         setPatSuccess(`Token validated and saved! Authenticated as ${userData.login}`)
+
+        // Re-check PAT status to update UI
+        console.log('🔄 Re-checking PAT status...')
+        await checkExistingPAT()
+        console.log('🔄 PAT status check complete, hasPAT should be updated')
+
         setTimeout(() => setPatSuccess(null), 5000)
       } else {
-        throw new Error('Failed to save token')
+        throw new Error(result.error || 'Failed to save token')
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save token')
@@ -113,7 +121,7 @@ export function AccountSettings() {
   }
 
   const handleRemovePAT = async () => {
-    if (!confirm('Are you sure you want to remove your GitHub Personal Access Token?')) {
+    if (!confirm('Are you sure you want to remove your API Personal Access Token?')) {
       return
     }
 
@@ -126,8 +134,7 @@ export function AccountSettings() {
 
       setHasPAT(false)
       setGithubPAT('')
-      setPatSuccess('GitHub token removed successfully')
-      setTimeout(() => setPatSuccess(null), 3000)
+      console.log('✅ API token removed successfully')
     } catch (err) {
       setError('Failed to remove token')
     }
@@ -339,13 +346,10 @@ export function AccountSettings() {
                 </div>
                 <button
                   onClick={handleRemovePAT}
-                  className="text-red-600 hover:text-red-700 text-sm font-medium"
+                  className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors duration-200"
                 >
-                  Remove Token
+                  Delete Token
                 </button>
-              </div>
-              <div className="text-sm text-gray-600">
-                <p>✅ Token is active and will be used for GitHub API requests</p>
               </div>
             </div>
           ) : (
