@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, memo, useMemo } from 'react'
 import * as d3 from 'd3'
 import { GitHubCommit } from '../types'
 
@@ -9,10 +9,22 @@ interface BranchTimelineProps {
   branches?: any[]
 }
 
-export function BranchTimeline({ commits, branches = [] }: BranchTimelineProps) {
+function BranchTimelineComponent({ commits, branches = [] }: BranchTimelineProps) {
   const svgRef = useRef<SVGSVGElement>(null)
   const [hoveredCommit, setHoveredCommit] = useState<any>(null)
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 })
+
+  // Create stable data representation for comparison
+  const stableCommits = useMemo(() => {
+    return commits.map(c => ({
+      sha: c.sha,
+      message: c.commit.message,
+      author: c.commit.author.name,
+      date: c.commit.author.date,
+      additions: c.stats?.additions || 0,
+      deletions: c.stats?.deletions || 0
+    }))
+  }, [commits])
 
   // Get unique authors and assign colors
   const authors = Array.from(new Set(commits.map(c => c.commit.author.name)))
@@ -174,7 +186,7 @@ export function BranchTimeline({ commits, branches = [] }: BranchTimelineProps) 
       setHoveredCommit(null)
     })
 
-  }, [commits])
+  }, [stableCommits])
 
   return (
     <div className="border border-gray-800/50 bg-gradient-to-br from-[#050509] via-[#0a0f1a] to-[#050509] rounded-lg overflow-hidden">
@@ -237,3 +249,7 @@ export function BranchTimeline({ commits, branches = [] }: BranchTimelineProps) 
     </div>
   )
 }
+
+// Memoize the component to prevent unnecessary re-renders
+// Since we now have stable props from the hook, simple memo is sufficient
+export const BranchTimeline = memo(BranchTimelineComponent)

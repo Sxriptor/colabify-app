@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { GitHubBranch, GitHubCommit, LocalUserLocation, DataSource, GitHubDataSource } from '../types'
 import * as dataFetchers from '../dataFetchers'
 
@@ -33,6 +33,16 @@ export function useRepositoryData(isOpen: boolean, project: any, activeTab?: str
           console.log('📡 Received Git event in visualization:', event)
 
           if (event.projectId === project.id) {
+            // Filter out test events that don't represent real changes
+            const testEventTypes = ['COMMIT', 'PUSH', 'REMOTE_UPDATE', 'BRANCH_SWITCH']
+            if (event.details?.isTest || 
+                event.type?.includes('test') || 
+                event.type?.includes('TEST') ||
+                (testEventTypes.includes(event.type) && event.details?.source === 'test')) {
+              console.log(`🧪 Ignoring test event (${event.type}) - no real changes occurred`)
+              return
+            }
+            
             // Do a background check without showing loading state
             checkForDataChanges()
           }
@@ -51,22 +61,40 @@ export function useRepositoryData(isOpen: boolean, project: any, activeTab?: str
     }
   }, [isOpen, project, activeTab])
 
-  // Function to create a simple hash of the data for comparison
+  // Function to create a comprehensive hash of the data for comparison
   const createDataHash = (data: any) => {
     try {
-      const dataString = JSON.stringify({
+      // Create a stable representation of the data, excluding timestamps and volatile fields
+      const stableData = {
         branches: data.branches?.map((b: any) => ({ 
           name: b.name, 
           head: b.head, 
           branch: b.branch,
           dirty: b.dirty,
           ahead: b.ahead,
-          behind: b.behind 
-        })),
-        commitsCount: data.commits?.length || 0,
-        lastCommitSha: data.commits?.[0]?.sha || '',
-        usersCount: data.users?.length || 0
-      })
+          behind: b.behind,
+          localBranches: b.localBranches?.sort() || [],
+          remoteBranches: b.remoteBranches?.sort() || [],
+          path: b.path
+          // Exclude lastChecked and other timestamp fields that change on every read
+        })).sort((a: any, b: any) => a.name.localeCompare(b.name)),
+        commits: data.commits?.map((c: any) => ({
+          sha: c.sha,
+          message: c.commit?.message,
+          author: c.commit?.author?.name
+          // Exclude date as it might be generated with current timestamp
+        })).sort((a: any, b: any) => a.sha.localeCompare(b.sha)),
+        users: data.users?.map((u: any) => ({
+          userId: u.userId,
+          userName: u.userName,
+          currentBranch: u.currentBranch,
+          localPath: u.localPath,
+          commitsToday: u.commitsToday
+        })).sort((a: any, b: any) => a.userId.localeCompare(b.userId))
+      }
+      
+      const dataString = JSON.stringify(stableData, null, 0)
+      
       // Simple hash function
       let hash = 0
       for (let i = 0; i < dataString.length; i++) {
@@ -220,13 +248,22 @@ export function useRepositoryData(isOpen: boolean, project: any, activeTab?: str
           users: realUsers
         })
 
+        // Debug logging for hash comparison
+        if (backgroundCheck) {
+          console.log(`🔍 Hash comparison - Previous: ${lastDataHash}, New: ${newDataHash}, Changed: ${newDataHash !== lastDataHash}`)
+        }
+
         // Only update state if data has actually changed
         if (newDataHash !== lastDataHash || !backgroundCheck) {
           if (backgroundCheck && newDataHash !== lastDataHash) {
             console.log('🔄 Data changed - updating UI')
+          } else if (!backgroundCheck) {
+            console.log('🔄 Initial load or manual refresh - updating UI')
           }
           
-          console.log('📊 All branches data:', allBranches)
+          if (!backgroundCheck) {
+            console.log('📊 All branches data:', allBranches)
+          }
           setBranches(allBranches)
           setCommits(finalCommits)
           setLocalUsers(realUsers)
@@ -343,11 +380,44 @@ export function useRepositoryData(isOpen: boolean, project: any, activeTab?: str
     }
   }
 
+  // Create stable memoized versions of the data to prevent unnecessary re-renders
+  const stableBranches = useMemo(() => branches, [JSON.stringify(branches.map(b => ({
+    name: b.name,
+    head: b.head,
+    branch: b.branch,
+    dirty: b.dirty,
+    ahead: b.ahead,
+    behind: b.behind,
+    localBranches: b.localBranches,
+    remoteBranches: b.remoteBranches,
+    path: b.path
+  })))])
+
+  const stableCommits = useMemo(() => commits, [JSON.stringify(commits.map(c => ({
+    sha: c.sha,
+    message: c.commit?.message,
+    author: c.commit?.author?.name,
+    email: c.commit?.author?.email,
+    date: c.commit?.author?.date,
+    additions: c.stats?.additions || 0,
+    deletions: c.stats?.deletions || 0
+  })))])
+
+  const stableLocalUsers = useMemo(() => localUsers, [JSON.stringify(localUsers.map(u => ({
+    userId: u.userId,
+    userName: u.userName,
+    userEmail: u.userEmail,
+    localPath: u.localPath,
+    currentBranch: u.currentBranch,
+    status: u.status,
+    commitsToday: u.commitsToday
+  })))])
+
   return {
     loading,
-    branches,
-    commits,
-    localUsers,
+    branches: stableBranches,
+    commits: stableCommits,
+    localUsers: stableLocalUsers,
     error,
     dataSource,
     githubConnected,

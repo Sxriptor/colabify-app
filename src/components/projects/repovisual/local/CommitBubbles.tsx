@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, memo, useMemo } from 'react'
 import * as d3 from 'd3'
 import { GitHubCommit } from '../types'
 
@@ -25,10 +25,22 @@ interface CommitBubblesProps {
   commits: GitHubCommit[]
 }
 
-export function CommitBubbles({ commits }: CommitBubblesProps) {
+function CommitBubblesComponent({ commits }: CommitBubblesProps) {
   const svgRef = useRef<SVGSVGElement>(null)
   const [selectedCommit, setSelectedCommit] = useState<CommitData | null>(null)
   const [layoutType, setLayoutType] = useState<'pack' | 'cluster'>('pack')
+
+  // Create stable data representation for comparison
+  const stableCommits = useMemo(() => {
+    return commits.map(c => ({
+      sha: c.sha,
+      message: c.commit.message,
+      author: c.commit.author.name,
+      email: c.commit.author.email,
+      additions: c.stats?.additions || 0,
+      deletions: c.stats?.deletions || 0
+    }))
+  }, [commits])
 
   // Get unique authors and assign colors
   const authors = Array.from(new Set(commits.map(c => c.commit.author.name)))
@@ -325,7 +337,7 @@ export function CommitBubbles({ commits }: CommitBubblesProps) {
         .attr('stroke-width', 2)
     })
 
-  }, [commits, layoutType])
+  }, [stableCommits, layoutType])
 
   return (
     <div className="border border-gray-800/50 bg-gradient-to-br from-[#050509] via-[#0a0f1a] to-[#050509] rounded-lg overflow-hidden">
@@ -442,3 +454,7 @@ export function CommitBubbles({ commits }: CommitBubblesProps) {
     </div>
   )
 }
+
+// Memoize the component to prevent unnecessary re-renders
+// Since we now have stable props from the hook, simple memo is sufficient
+export const CommitBubbles = memo(CommitBubblesComponent)
