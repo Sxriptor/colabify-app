@@ -122,6 +122,49 @@ export function useRepositoryData(isOpen: boolean, project: any, activeTab?: str
     }
   }
 
+  const updateGitDataCache = async (mappingId: string, gitHistory: any) => {
+    try {
+      console.log(`💾 Updating Git data cache for mapping ${mappingId}`)
+      
+      // Prepare cache data with summary statistics
+      const cacheData = {
+        ...gitHistory,
+        cachedAt: new Date().toISOString(),
+        summary: {
+          totalCommits: gitHistory.commits?.length || 0,
+          totalBranches: gitHistory.branches?.length || 0,
+          totalContributors: new Set(gitHistory.commits?.map((c: any) => c.author?.email)).size || 0,
+          firstCommitDate: gitHistory.commits?.[gitHistory.commits.length - 1]?.date,
+          lastCommitDate: gitHistory.commits?.[0]?.date,
+          linesOfCode: {
+            additions: gitHistory.commits?.reduce((sum: number, c: any) => sum + (c.stats?.additions || 0), 0) || 0,
+            deletions: gitHistory.commits?.reduce((sum: number, c: any) => sum + (c.stats?.deletions || 0), 0) || 0
+          }
+        }
+      }
+
+      // Update the database cache
+      const { error } = await (window as any).electronAPI?.supabase?.from('repository_local_mappings')
+        .update({
+          git_data_cache: cacheData,
+          git_data_last_updated: new Date().toISOString(),
+          git_data_commit_count: gitHistory.commits?.length || 0,
+          git_data_branch_count: gitHistory.branches?.length || 0,
+          git_data_last_commit_sha: gitHistory.commits?.[0]?.sha,
+          git_data_last_commit_date: gitHistory.commits?.[0]?.date
+        })
+        .eq('id', mappingId)
+
+      if (error) {
+        console.error('❌ Failed to update Git data cache:', error)
+      } else {
+        console.log(`✅ Git data cache updated for mapping ${mappingId}`)
+      }
+    } catch (cacheError) {
+      console.error('❌ Error updating Git data cache:', cacheError)
+    }
+  }
+
   const checkForDataChanges = async () => {
     const now = Date.now()
     const timeSinceLastCheck = now - lastCheckTime
@@ -183,6 +226,72 @@ export function useRepositoryData(isOpen: boolean, project: any, activeTab?: str
 
       for (const mapping of localMappings) {
         try {
+          // First check if the path exists on this PC
+          let pathExists = false
+          try {
+            if (electronAPI.fs && electronAPI.fs.pathExists) {
+              pathExists = await electronAPI.fs.pathExists(mapping.local_path)
+            } else {
+              // Fallback: try to read Git history and see if it fails
+              pathExists = true // Assume it exists and let the Git read fail gracefully
+            }
+          } catch (pathError) {
+            console.warn(`⚠️ Could not check path existence for ${mapping.local_path}:`, pathError)
+            pathExists = false
+          }
+
+          if (!pathExists) {
+            console.log(`📂 Path not found on this PC: ${mapping.local_path} - checking for cached data`)
+            
+            // Check if we have cached Git data for this repository
+            if (mapping.git_data_cache && mapping.git_data_cache.commits) {
+              console.log(`💾 Using cached Git data for ${mapping.local_path}`)
+              const cachedData = mapping.git_data_cache
+              
+              allBranches.push({
+                name: cachedData.repoPath?.split('/').pop() || mapping.local_path.split('/').pop() || 'Unknown',
+                path: mapping.local_path,
+                branch: cachedData.currentBranch || 'main',
+                head: cachedData.commits[0]?.sha || 'cached',
+                dirty: false,
+                ahead: 0,
+                behind: 0,
+                localBranches: cachedData.branches?.filter((b: any) => b.isLocal).map((b: any) => b.name) || ['main'],
+                remoteBranches: cachedData.branches?.filter((b: any) => b.isRemote).map((b: any) => b.name) || [],
+                remoteUrls: cachedData.remotes || {},
+                lastChecked: cachedData.cachedAt || mapping.git_data_last_updated,
+                user: mapping.user,
+                id: `cached-${mapping.id || Date.now()}`,
+                history: cachedData, // Use cached history
+                isPlaceholder: true,
+                notFoundOnPC: true,
+                usingCachedData: true
+              })
+            } else {
+              console.log(`📂 No cached data available for ${mapping.local_path} - creating empty placeholder`)
+              // Create a placeholder entry for repositories not on this PC with no cache
+              allBranches.push({
+                name: mapping.local_path.split('/').pop() || mapping.local_path.split('\\').pop() || 'Unknown',
+                path: mapping.local_path,
+                branch: 'main',
+                head: 'not-available',
+                dirty: false,
+                ahead: 0,
+                behind: 0,
+                localBranches: ['main'],
+                remoteBranches: [],
+                remoteUrls: {},
+                lastChecked: new Date().toISOString(),
+                user: mapping.user,
+                id: `placeholder-${mapping.id || Date.now()}`,
+                isPlaceholder: true,
+                notFoundOnPC: true,
+                noCachedData: true
+              })
+            }
+            continue
+          }
+
           console.log(`📚 Reading complete Git history from: ${mapping.local_path}`)
           const history = await dataFetchers.readCompleteGitHistory(mapping.local_path)
 
@@ -206,6 +315,9 @@ export function useRepositoryData(isOpen: boolean, project: any, activeTab?: str
                 history: history // Store complete history
               })
               console.log(`✅ Read ${history.commits.length} commits from ${mapping.local_path}`)
+              
+              // Update Git data cache in database
+              await updateGitDataCache(mapping.id, history)
             } else {
               // Fallback to basic Git data
               const gitData = await dataFetchers.readGitDataFromPath(mapping.local_path)
@@ -220,10 +332,47 @@ export function useRepositoryData(isOpen: boolean, project: any, activeTab?: str
               }
             }
           } else {
-            console.warn(`⚠️ No Git data returned from ${mapping.local_path}`)
+            console.warn(`⚠️ No Git data returned from ${mapping.local_path} - creating placeholder`)
+            // Create placeholder for paths that exist but can't be read as Git repos
+            allBranches.push({
+              name: mapping.local_path.split('/').pop() || mapping.local_path.split('\\').pop() || 'Unknown',
+              path: mapping.local_path,
+              branch: 'main',
+              head: 'not-available',
+              dirty: false,
+              ahead: 0,
+              behind: 0,
+              localBranches: ['main'],
+              remoteBranches: [],
+              remoteUrls: {},
+              lastChecked: new Date().toISOString(),
+              user: mapping.user,
+              id: `placeholder-${mapping.id || Date.now()}`,
+              isPlaceholder: true,
+              gitReadError: true
+            })
           }
         } catch (repoError) {
           console.warn(`❌ Failed to read Git data from ${mapping.local_path}:`, repoError)
+          // Create placeholder for paths that failed to read
+          allBranches.push({
+            name: mapping.local_path.split('/').pop() || mapping.local_path.split('\\').pop() || 'Unknown',
+            path: mapping.local_path,
+            branch: 'main',
+            head: 'error',
+            dirty: false,
+            ahead: 0,
+            behind: 0,
+            localBranches: ['main'],
+            remoteBranches: [],
+            remoteUrls: {},
+            lastChecked: new Date().toISOString(),
+            user: mapping.user,
+            id: `error-${mapping.id || Date.now()}`,
+            isPlaceholder: true,
+            hasError: true,
+            errorMessage: repoError instanceof Error ? repoError.message : 'Unknown error'
+          })
         }
       }
 
