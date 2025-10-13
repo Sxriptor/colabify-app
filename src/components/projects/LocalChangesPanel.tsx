@@ -47,8 +47,22 @@ export function LocalChangesPanel({ project }: LocalChangesPanelProps) {
   const isElectron = typeof window !== 'undefined' && (window as any).electronAPI
 
   useEffect(() => {
-    if (user && isElectron) {
+    if (!user || !isElectron) {
+      return
+    }
+
+    // Initial fetch
+    fetchLocalChanges()
+
+    // Set up auto-refresh every 10 seconds
+    const refreshInterval = setInterval(() => {
+      console.log('⏰ Auto-refreshing local changes data...')
       fetchLocalChanges()
+    }, 10000) // 10 seconds
+
+    // Cleanup interval on unmount
+    return () => {
+      clearInterval(refreshInterval)
     }
   }, [user, project.id, isElectron])
 
@@ -181,7 +195,16 @@ export function LocalChangesPanel({ project }: LocalChangesPanelProps) {
       }
 
       console.log('📊 All local changes:', allLocalChanges)
-      setLocalChangesData(allLocalChanges)
+
+      // Compare with existing data to see if update is needed
+      const hasChanges = JSON.stringify(allLocalChanges) !== JSON.stringify(localChangesData)
+
+      if (hasChanges) {
+        console.log('🔄 Local changes detected, updating UI')
+        setLocalChangesData(allLocalChanges)
+      } else {
+        console.log('✅ No local changes detected, skipping update')
+      }
 
     } catch (error) {
       console.error('Failed to fetch local changes:', error)

@@ -166,10 +166,9 @@ export function LiveActivityPanel({ project }: LiveActivityPanelProps) {
   // Fetch real data when watching or use mock data
   useEffect(() => {
     const fetchData = async () => {
-      if (isWatching) {
-        setLoading(true)
-        try {
-          // Get repository local mappings for the project
+      setLoading(true)
+      try {
+        // Get repository local mappings for the project
           const { createElectronClient } = await import('@/lib/supabase/electron-client')
           const supabase = await createElectronClient()
 
@@ -320,22 +319,28 @@ export function LiveActivityPanel({ project }: LiveActivityPanelProps) {
           // Sort activities by date
           activityData.sort((a, b) => b.occurredAt.getTime() - a.occurredAt.getTime())
 
+          // Compare with existing data to see if update is needed
+        const hasChanges =
+          JSON.stringify(uniqueTeamData) !== JSON.stringify(teamMembers) ||
+          JSON.stringify(activityData.slice(0, 20)) !== JSON.stringify(activities)
+
+        if (hasChanges) {
+          console.log('🔄 Data changed, updating UI')
           setTeamMembers(uniqueTeamData)
           setActivities(activityData.slice(0, 20))
-
-          // If no data found, load mock data
-          if (uniqueTeamData.length === 0 && activityData.length === 0) {
-            loadMockData()
-          }
-        } catch (error) {
-          console.error('Failed to fetch live data:', error)
-          loadMockData()
-        } finally {
-          setLoading(false)
+        } else {
+          console.log('✅ No changes detected, skipping update')
         }
-      } else {
-        setActivities([])
-        setTeamMembers([])
+
+        // If no data found, load mock data
+        if (uniqueTeamData.length === 0 && activityData.length === 0) {
+          loadMockData()
+        }
+      } catch (error) {
+        console.error('Failed to fetch live data:', error)
+        loadMockData()
+      } finally {
+        setLoading(false)
       }
     }
 
@@ -409,7 +414,25 @@ export function LiveActivityPanel({ project }: LiveActivityPanelProps) {
       setTeamMembers(mockTeamMembers)
     }
 
+    // Initial fetch
+    if (!isWatching) {
+      setActivities([])
+      setTeamMembers([])
+      return
+    }
+
     fetchData()
+
+    // Set up auto-refresh every 10 seconds
+    const refreshInterval = setInterval(() => {
+      console.log('⏰ Auto-refreshing user activity data...')
+      fetchData()
+    }, 10000) // 10 seconds
+
+    // Cleanup interval on unmount
+    return () => {
+      clearInterval(refreshInterval)
+    }
   }, [isWatching, user, isElectron, status.isRunning, project.id, getTeamAwareness, getRecentActivities])
 
 
