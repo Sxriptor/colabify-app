@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { GitHubBranch, GitHubCommit, LocalUserLocation, DataSource, GitHubDataSource } from '../types'
 import * as dataFetchers from '../dataFetchers'
 
-export function useRepositoryData(isOpen: boolean, project: any) {
+export function useRepositoryData(isOpen: boolean, project: any, activeTab?: string) {
   const [loading, setLoading] = useState(false)
   const [branches, setBranches] = useState<GitHubBranch[]>([])
   const [commits, setCommits] = useState<GitHubCommit[]>([])
@@ -11,10 +11,18 @@ export function useRepositoryData(isOpen: boolean, project: any) {
   const [dataSource, setDataSource] = useState<DataSource>('mock')
   const [githubConnected, setGithubConnected] = useState<boolean>(false)
   const [githubDataSource, setGithubDataSource] = useState<GitHubDataSource>('disconnected')
+  
+  // Add state to track last data hash to prevent unnecessary updates
+  const [lastDataHash, setLastDataHash] = useState<string>('')
+  const [isBackgroundCheck, setIsBackgroundCheck] = useState(false)
+  const [lastCheckTime, setLastCheckTime] = useState<number>(0)
 
   useEffect(() => {
     if (isOpen && project?.repositories?.length > 0) {
-      checkGitHubConnection()
+      // Only check GitHub connection if we're on the remote tab
+      if (activeTab === 'remote') {
+        checkGitHubConnection()
+      }
       fetchRepositoryData()
 
       // Set up real-time Git event listener
@@ -25,7 +33,8 @@ export function useRepositoryData(isOpen: boolean, project: any) {
           console.log('📡 Received Git event in visualization:', event)
 
           if (event.projectId === project.id) {
-            fetchRepositoryData()
+            // Do a background check without showing loading state
+            checkForDataChanges()
           }
         }
 
@@ -40,7 +49,37 @@ export function useRepositoryData(isOpen: boolean, project: any) {
         }
       }
     }
-  }, [isOpen, project])
+  }, [isOpen, project, activeTab])
+
+  // Function to create a simple hash of the data for comparison
+  const createDataHash = (data: any) => {
+    try {
+      const dataString = JSON.stringify({
+        branches: data.branches?.map((b: any) => ({ 
+          name: b.name, 
+          head: b.head, 
+          branch: b.branch,
+          dirty: b.dirty,
+          ahead: b.ahead,
+          behind: b.behind 
+        })),
+        commitsCount: data.commits?.length || 0,
+        lastCommitSha: data.commits?.[0]?.sha || '',
+        usersCount: data.users?.length || 0
+      })
+      // Simple hash function
+      let hash = 0
+      for (let i = 0; i < dataString.length; i++) {
+        const char = dataString.charCodeAt(i)
+        hash = ((hash << 5) - hash) + char
+        hash = hash & hash // Convert to 32-bit integer
+      }
+      return hash.toString()
+    } catch (error) {
+      console.warn('Error creating data hash:', error)
+      return Date.now().toString()
+    }
+  }
 
   const checkGitHubConnection = async () => {
     if (typeof window !== 'undefined' && (window as any).electronAPI) {
@@ -55,9 +94,28 @@ export function useRepositoryData(isOpen: boolean, project: any) {
     }
   }
 
-  const fetchRepositoryData = async () => {
-    setLoading(true)
-    setError(null)
+  const checkForDataChanges = async () => {
+    const now = Date.now()
+    const timeSinceLastCheck = now - lastCheckTime
+    
+    // Debounce: only check if it's been at least 2 seconds since last check
+    if (timeSinceLastCheck < 2000) {
+      console.log('🔍 Skipping background check - too soon since last check')
+      return
+    }
+    
+    console.log('🔍 Checking for data changes in background...')
+    setLastCheckTime(now)
+    setIsBackgroundCheck(true)
+    await fetchRepositoryData(true) // Pass true for background check
+    setIsBackgroundCheck(false)
+  }
+
+  const fetchRepositoryData = async (backgroundCheck = false) => {
+    if (!backgroundCheck) {
+      setLoading(true)
+      setError(null)
+    }
 
     try {
       if (typeof window === 'undefined' || !(window as any).electronAPI) {
@@ -142,11 +200,6 @@ export function useRepositoryData(isOpen: boolean, project: any) {
       }
 
       if (allBranches.length > 0) {
-        console.log('📊 All branches data:', allBranches)
-        setBranches(allBranches)
-        setDataSource('backend')
-        console.log(`✅ Using real Git data from ${allBranches.length} stored repositories`)
-
         // Generate commits from complete history if available
         const allCommits: any[] = []
         for (const branch of allBranches) {
@@ -157,72 +210,98 @@ export function useRepositoryData(isOpen: boolean, project: any) {
         }
 
         // If we have commits from history, use them; otherwise fall back to generated data
-        if (allCommits.length > 0) {
-          setCommits(allCommits)
-          console.log(`✅ Using ${allCommits.length} commits from complete Git history`)
-        } else {
-          const realCommits = await dataFetchers.generateCommitsFromRealData(allBranches)
-          setCommits(realCommits)
-        }
-
+        const finalCommits = allCommits.length > 0 ? allCommits : await dataFetchers.generateCommitsFromRealData(allBranches)
         const realUsers = await dataFetchers.generateUsersFromRealData(allBranches)
-        setLocalUsers(realUsers)
+
+        // Create hash of new data
+        const newDataHash = createDataHash({
+          branches: allBranches,
+          commits: finalCommits,
+          users: realUsers
+        })
+
+        // Only update state if data has actually changed
+        if (newDataHash !== lastDataHash || !backgroundCheck) {
+          if (backgroundCheck && newDataHash !== lastDataHash) {
+            console.log('🔄 Data changed - updating UI')
+          }
+          
+          console.log('📊 All branches data:', allBranches)
+          setBranches(allBranches)
+          setCommits(finalCommits)
+          setLocalUsers(realUsers)
+          setDataSource('backend')
+          setLastDataHash(newDataHash)
+          
+          console.log(`✅ Using real Git data from ${allBranches.length} stored repositories`)
+          if (finalCommits.length > 0) {
+            console.log(`✅ Using ${finalCommits.length} commits from ${allCommits.length > 0 ? 'complete Git history' : 'generated data'}`)
+          }
+        } else if (backgroundCheck) {
+          console.log('✅ No data changes detected - skipping UI update')
+        }
       }
       
-      console.log('🔍 Attempting to fetch GitHub data for Remote tab...')
-      
-      // Try to get GitHub repo info from local Git remotes first
-      let githubOwner = null
-      let githubRepo = null
-      
-      for (const branch of allBranches) {
-        if (branch.remoteUrls) {
-          const originUrl = branch.remoteUrls.origin || Object.values(branch.remoteUrls)[0]
-          if (originUrl && typeof originUrl === 'string') {
-            try {
-              let cleanUrl = originUrl
-              if (cleanUrl.startsWith('git@github.com:')) {
-                cleanUrl = cleanUrl.replace('git@github.com:', 'https://github.com/')
-              }
-              if (cleanUrl.includes('github.com')) {
-                const match = cleanUrl.match(/github\.com[\/:]([^\/]+)\/([^\/]+?)(?:\.git)?(?:\/)?$/)
-                if (match) {
-                  githubOwner = match[1]
-                  githubRepo = match[2]
-                  break
+      // Only fetch GitHub data if we're on the remote tab
+      if (activeTab === 'remote') {
+        console.log('🔍 Attempting to fetch GitHub data for Remote tab...')
+        
+        // Try to get GitHub repo info from local Git remotes first
+        let githubOwner = null
+        let githubRepo = null
+        
+        for (const branch of allBranches) {
+          if (branch.remoteUrls) {
+            const originUrl = branch.remoteUrls.origin || Object.values(branch.remoteUrls)[0]
+            if (originUrl && typeof originUrl === 'string') {
+              try {
+                let cleanUrl = originUrl
+                if (cleanUrl.startsWith('git@github.com:')) {
+                  cleanUrl = cleanUrl.replace('git@github.com:', 'https://github.com/')
                 }
+                if (cleanUrl.includes('github.com')) {
+                  const match = cleanUrl.match(/github\.com[\/:]([^\/]+)\/([^\/]+?)(?:\.git)?(?:\/)?$/)
+                  if (match) {
+                    githubOwner = match[1]
+                    githubRepo = match[2]
+                    break
+                  }
+                }
+              } catch (error) {
+                console.warn('Failed to parse Git remote URL:', originUrl, error)
               }
-            } catch (error) {
-              console.warn('Failed to parse Git remote URL:', originUrl, error)
             }
           }
         }
-      }
-      
-      // Fallback to project configuration if no remote found
-      if (!githubOwner || !githubRepo) {
-        if (project.repositories?.[0]?.url) {
-          try {
-            const repo = project.repositories[0]
-            const urlParts = repo.url.replace('https://github.com/', '').replace(/\.git$/, '').split('/')
-            githubOwner = urlParts[0]
-            githubRepo = urlParts[1]
-          } catch (error) {
-            console.warn('⚠️ Could not parse owner/repo from project URL:', project.repositories[0].url)
+        
+        // Fallback to project configuration if no remote found
+        if (!githubOwner || !githubRepo) {
+          if (project.repositories?.[0]?.url) {
+            try {
+              const repo = project.repositories[0]
+              const urlParts = repo.url.replace('https://github.com/', '').replace(/\.git$/, '').split('/')
+              githubOwner = urlParts[0]
+              githubRepo = urlParts[1]
+            } catch (error) {
+              console.warn('⚠️ Could not parse owner/repo from project URL:', project.repositories[0].url)
+            }
           }
         }
-      }
 
-      if (githubOwner && githubRepo) {
-        try {
-          console.log(`📡 Fetching GitHub branches for ${githubOwner}/${githubRepo}`)
-          await dataFetchers.fetchGitHubBranches(githubOwner, githubRepo, setGithubDataSource, setError)
-        } catch (githubError) {
-          console.error('❌ Error fetching GitHub data:', githubError)
+        if (githubOwner && githubRepo) {
+          try {
+            console.log(`📡 Fetching GitHub branches for ${githubOwner}/${githubRepo}`)
+            await dataFetchers.fetchGitHubBranches(githubOwner, githubRepo, setGithubDataSource, setError)
+          } catch (githubError) {
+            console.error('❌ Error fetching GitHub data:', githubError)
+            setGithubDataSource('disconnected')
+          }
+        } else {
+          console.log('⚠️ No GitHub repository information found')
           setGithubDataSource('disconnected')
         }
       } else {
-        console.log('⚠️ No GitHub repository information found')
+        console.log('📍 Local tab active - skipping GitHub API calls')
         setGithubDataSource('disconnected')
       }
       
@@ -258,7 +337,9 @@ export function useRepositoryData(isOpen: boolean, project: any) {
       await dataFetchers.fetchMockUsers(setLocalUsers)
       setDataSource('mock')
     } finally {
-      setLoading(false)
+      if (!backgroundCheck) {
+        setLoading(false)
+      }
     }
   }
 

@@ -28,7 +28,7 @@ export function RepoVisualizationModal({ isOpen, onClose, project }: RepoVisuali
     githubConnected,
     githubDataSource,
     fetchRepositoryData
-  } = useRepositoryData(isOpen, project)
+  } = useRepositoryData(isOpen, project, activeTab)
 
   if (!isOpen) return null
 
