@@ -144,21 +144,29 @@ export function useRepositoryData(isOpen: boolean, project: any, activeTab?: str
       }
 
       // Update the database cache
-      const { error } = await (window as any).electronAPI?.supabase?.from('repository_local_mappings')
-        .update({
-          git_data_cache: cacheData,
-          git_data_last_updated: new Date().toISOString(),
-          git_data_commit_count: gitHistory.commits?.length || 0,
-          git_data_branch_count: gitHistory.branches?.length || 0,
-          git_data_last_commit_sha: gitHistory.commits?.[0]?.sha,
-          git_data_last_commit_date: gitHistory.commits?.[0]?.date
-        })
-        .eq('id', mappingId)
+      try {
+        const { createElectronClient } = await import('@/lib/supabase/electron-client')
+        const supabase = await createElectronClient()
+        
+        const { error } = await supabase
+          .from('repository_local_mappings')
+          .update({
+            git_data_cache: cacheData,
+            git_data_last_updated: new Date().toISOString(),
+            git_data_commit_count: gitHistory.commits?.length || 0,
+            git_data_branch_count: gitHistory.branches?.length || 0,
+            git_data_last_commit_sha: gitHistory.commits?.[0]?.sha,
+            git_data_last_commit_date: gitHistory.commits?.[0]?.date
+          })
+          .eq('id', mappingId)
 
-      if (error) {
-        console.error('❌ Failed to update Git data cache:', error)
-      } else {
-        console.log(`✅ Git data cache updated for mapping ${mappingId}`)
+        if (error) {
+          console.error('❌ Failed to update Git data cache:', error)
+        } else {
+          console.log(`✅ Git data cache updated for mapping ${mappingId}`)
+        }
+      } catch (supabaseError) {
+        console.error('❌ Failed to get Supabase client for cache update:', supabaseError)
       }
     } catch (cacheError) {
       console.error('❌ Error updating Git data cache:', cacheError)
