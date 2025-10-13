@@ -11,11 +11,6 @@ export function LocalActivityLog({ commits }: LocalActivityLogProps) {
       <div className="border-b border-gray-800 p-4 bg-gray-900">
         <div className="flex items-center justify-between">
           <h3 className="text-white font-mono text-sm">ACTIVITY.LOG</h3>
-          <div className="flex space-x-2">
-            <div className="w-3 h-3 bg-red-500 rounded-full"></div>
-            <div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
-            <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-          </div>
         </div>
       </div>
       <div className="p-4 h-80 overflow-y-auto">

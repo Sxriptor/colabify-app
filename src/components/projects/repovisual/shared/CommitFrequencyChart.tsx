@@ -1,15 +1,39 @@
-export function CommitFrequencyChart() {
+import { memo, useMemo } from 'react'
+import { GitHubCommit } from '../types'
+
+interface CommitFrequencyChartProps {
+  commits?: GitHubCommit[]
+}
+
+function CommitFrequencyChartComponent({ commits = [] }: CommitFrequencyChartProps) {
+  // Calculate commit frequency by day of week from real data
+  const dayFrequency = useMemo(() => {
+    const frequency = [0, 0, 0, 0, 0, 0, 0] // Sun, Mon, Tue, Wed, Thu, Fri, Sat
+    
+    commits.forEach(commit => {
+      const date = new Date(commit.commit.author.date)
+      const dayOfWeek = date.getDay()
+      frequency[dayOfWeek]++
+    })
+    
+    return frequency
+  }, [commits])
+
+  const maxCommits = Math.max(...dayFrequency, 1) // Avoid division by zero
+
   return (
     <div className="border border-gray-800 bg-black">
       <div className="border-b border-gray-800 p-4">
         <h3 className="text-white font-mono text-sm">COMMIT.FREQUENCY.ANALYSIS</h3>
+        <p className="text-gray-500 font-mono text-xs mt-1">
+          {commits.length} commits analyzed • Distribution by day of week
+        </p>
       </div>
       <div className="p-6">
         <div className="font-mono text-xs space-y-1">
-          {Array.from({ length: 7 }).map((_, dayIndex) => {
+          {dayFrequency.map((commitCount, dayIndex) => {
             const dayName = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'][dayIndex]
-            const commitCount = Math.floor(Math.random() * 20)
-            const barLength = Math.floor((commitCount / 20) * 40)
+            const barLength = maxCommits > 0 ? Math.floor((commitCount / maxCommits) * 40) : 0
 
             return (
               <div key={dayIndex} className="flex items-center space-x-2">
@@ -27,7 +51,15 @@ export function CommitFrequencyChart() {
             )
           })}
         </div>
+        {commits.length === 0 && (
+          <div className="text-center text-gray-500 font-mono text-xs mt-4">
+            No commit data available
+          </div>
+        )}
       </div>
     </div>
   )
 }
+
+// Memoize the component to prevent unnecessary re-renders
+export const CommitFrequencyChart = memo(CommitFrequencyChartComponent)
