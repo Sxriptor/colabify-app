@@ -132,7 +132,7 @@ export class GitCacheRefreshService {
       }
 
       // Convert to the format expected by GitScanningService
-      const mappings = repositoriesToRefresh.map(repo => ({
+      const mappings = repositoriesToRefresh.map((repo: any) => ({
         id: repo.id,
         local_path: repo.local_path,
         project_id: repo.project_id,

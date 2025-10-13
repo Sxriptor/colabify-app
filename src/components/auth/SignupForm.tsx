@@ -4,17 +4,6 @@ import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 
-declare global {
-  interface Window {
-    electronAPI?: {
-      openExternalUrl: (url: string) => Promise<{ success: boolean }>;
-      onAuthCallback: (callback: (url: string) => void) => void;
-      removeAuthCallback: () => void;
-      isElectron: boolean;
-    };
-  }
-}
-
 export function SignupForm() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)

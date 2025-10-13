@@ -177,9 +177,8 @@ export class DatabaseSync {
       return false
     }
   }
-}
-  /*
-*
+
+  /**
    * Sync live activity session to database
    */
   async syncLiveSession(session: LiveSession): Promise<void> {
@@ -429,3 +428,4 @@ export class DatabaseSync {
       console.error('Failed to cleanup old data:', error)
     }
   }
+}

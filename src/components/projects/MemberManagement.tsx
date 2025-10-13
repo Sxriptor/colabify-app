@@ -80,8 +80,19 @@ export function MemberManagement({ projectId, canManage, refreshTrigger }: Membe
 
       if (invitationsError) throw invitationsError
 
-      setMembers(membersData || [])
-      setInvitations(invitationsData || [])
+      // Transform data to handle Supabase array responses for relations
+      const transformedMembers = (membersData || []).map(item => ({
+        ...item,
+        user: Array.isArray(item.user) ? item.user[0] : item.user
+      }))
+
+      const transformedInvitations = (invitationsData || []).map(item => ({
+        ...item,
+        inviter: Array.isArray(item.inviter) ? item.inviter[0] : item.inviter
+      }))
+
+      setMembers(transformedMembers)
+      setInvitations(transformedInvitations)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred')
     } finally {

@@ -158,7 +158,7 @@ export function RepoVisualizationModal({ isOpen, onClose, project }: RepoVisuali
             <div className="text-center py-12 border border-gray-800 bg-gray-900">
               <div className="text-red-400 mb-4 font-mono">ERROR: {error}</div>
               <button
-                onClick={fetchRepositoryData}
+                onClick={() => fetchRepositoryData()}
                 className="bg-white text-black px-6 py-2 font-mono text-sm hover:bg-gray-200 transition-colors"
               >
                 RETRY.CONNECTION

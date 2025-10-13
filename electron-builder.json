@@ -12,10 +12,13 @@
     "buildResources": "build"
   },
   "files": [
-    "out/**/*",
+    ".next/**/*",
     "electron/**/*",
     "public/**/*",
-    "package.json"
+    "package.json",
+    "node_modules/**/*",
+    "!node_modules/@img/sharp-*/**/*",
+    "!node_modules/@img/sharp/**/*"
   ],
   "mac": {
     "category": "public.app-category.productivity",

@@ -46,7 +46,7 @@ export function useGitMonitoring() {
   const [loading, setLoading] = useState(false)
 
   // Check if we're in Electron environment
-  const isElectron = typeof window !== 'undefined' && window.electron
+  const isElectron = typeof window !== 'undefined' && window.electronAPI
 
   /**
    * Start Git monitoring backend
@@ -62,7 +62,7 @@ export function useGitMonitoring() {
         syncInterval: 60000 // 1 minute
       }
 
-      const result = await window.electron.invoke('git-monitoring:start', config)
+      const result = await window.electronAPI?.invoke('git-monitoring:start', config)
       
       if (result.success) {
         await refreshStatus()
@@ -85,7 +85,7 @@ export function useGitMonitoring() {
 
     setLoading(true)
     try {
-      const result = await window.electron.invoke('git-monitoring:stop')
+      const result = await window.electronAPI?.invoke('git-monitoring:stop')
       
       if (result.success) {
         await refreshStatus()
@@ -107,7 +107,7 @@ export function useGitMonitoring() {
     if (!isElectron) return { success: false, error: 'Not in Electron environment' }
 
     try {
-      const result = await window.electron.invoke('git-monitoring:toggle-project-watch', projectId, watching)
+      const result = await window.electronAPI?.invoke('git-monitoring:toggle-project-watch', projectId, watching)
       
       if (result.success) {
         await refreshStatus()
@@ -127,7 +127,7 @@ export function useGitMonitoring() {
     if (!isElectron) return []
 
     try {
-      const result = await window.electron.invoke('git-monitoring:get-team-awareness', projectId)
+      const result = await window.electronAPI?.invoke('git-monitoring:get-team-awareness', projectId)
       
       if (result.success && result.data) {
         return result.data.map((item: any) => ({
@@ -150,7 +150,7 @@ export function useGitMonitoring() {
     if (!isElectron) return []
 
     try {
-      const result = await window.electron.invoke('git-monitoring:get-recent-activities', projectId, limit)
+      const result = await window.electronAPI?.invoke('git-monitoring:get-recent-activities', projectId, limit)
       
       if (result.success && result.data) {
         return result.data.map((item: any) => ({
@@ -173,7 +173,7 @@ export function useGitMonitoring() {
     if (!isElectron) return { success: false, error: 'Not in Electron environment' }
 
     try {
-      return await window.electron.invoke('git-monitoring:update-focus-file', sessionId, filePath)
+      return await window.electronAPI?.invoke('git-monitoring:update-focus-file', sessionId, filePath)
     } catch (error) {
       console.error('Failed to update focus file:', error)
       return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
@@ -187,7 +187,7 @@ export function useGitMonitoring() {
     if (!isElectron) return
 
     try {
-      const newStatus = await window.electron.invoke('git-monitoring:status')
+      const newStatus = await window.electronAPI?.invoke('git-monitoring:status')
       setStatus(newStatus)
     } catch (error) {
       console.error('Failed to get Git monitoring status:', error)

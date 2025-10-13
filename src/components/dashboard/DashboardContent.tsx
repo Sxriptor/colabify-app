@@ -42,7 +42,18 @@ export function DashboardContent() {
         .order('created_at', { ascending: false })
 
       if (error) throw error
-      setProjects(data || [])
+
+      // Transform data to handle Supabase array responses for relations
+      const transformedData = (data || []).map(project => ({
+        ...project,
+        owner: Array.isArray(project.owner) ? project.owner[0] : project.owner,
+        members: (project.members || []).map((member: any) => ({
+          ...member,
+          user: Array.isArray(member.user) ? member.user[0] : member.user
+        }))
+      }))
+
+      setProjects(transformedData)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred')
     } finally {

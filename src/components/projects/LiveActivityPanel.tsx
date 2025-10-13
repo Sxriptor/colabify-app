@@ -204,7 +204,8 @@ export function LiveActivityPanel({ project }: LiveActivityPanelProps) {
               if (repo.local_mappings && repo.local_mappings.length > 0) {
                 for (const mapping of repo.local_mappings) {
                   try {
-                    console.log(`🔍 Checking mapping for user ${mapping.user.name}:`, mapping.local_path)
+                    const user = Array.isArray(mapping.user) ? mapping.user[0] : mapping.user
+                    console.log(`🔍 Checking mapping for user ${user.name}:`, mapping.local_path)
 
                     // Check if we can access this local path
                     const isAccessible = await checkPathAccessibility(mapping.local_path)
@@ -218,7 +219,7 @@ export function LiveActivityPanel({ project }: LiveActivityPanelProps) {
                       if (gitData) {
                         teamData.push({
                           userId: mapping.user_id,
-                          userName: mapping.user.name || mapping.user.email,
+                          userName: user.name || user.email,
                           status: 'active',
                           currentBranch: gitData.branch,
                           currentFile: gitData.lastModifiedFile,
@@ -235,7 +236,7 @@ export function LiveActivityPanel({ project }: LiveActivityPanelProps) {
                             activityData.push({
                               id: commit.sha,
                               userId: mapping.user_id,
-                              userName: mapping.user.name || mapping.user.email,
+                              userName: user.name || user.email,
                               activityType: 'COMMIT',
                               activityData: { subject: commit.message },
                               branchName: commit.branch || gitData.branch,
@@ -252,7 +253,7 @@ export function LiveActivityPanel({ project }: LiveActivityPanelProps) {
                       // Use repository_local_mappings data for inaccessible paths
                       teamData.push({
                         userId: mapping.user_id,
-                        userName: mapping.user.name || mapping.user.email,
+                        userName: user.name || user.email,
                         status: 'away',
                         currentBranch: undefined,
                         workingOn: `Working on ${repo.name}`,
@@ -263,9 +264,10 @@ export function LiveActivityPanel({ project }: LiveActivityPanelProps) {
                   } catch (error) {
                     console.error(`Error processing mapping for ${mapping.local_path}:`, error)
                     // Fall back to basic info from database
+                    const user = Array.isArray(mapping.user) ? mapping.user[0] : mapping.user
                     teamData.push({
                       userId: mapping.user_id,
-                      userName: mapping.user.name || mapping.user.email,
+                      userName: user.name || user.email,
                       status: 'away',
                       workingOn: `Working on ${repo.name}`,
                       lastSeen: new Date(),

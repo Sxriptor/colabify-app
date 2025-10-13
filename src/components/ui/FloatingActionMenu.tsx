@@ -74,7 +74,23 @@ export function FloatingActionMenu() {
         .single()
 
       if (error) throw error
-      setCurrentProject(data)
+
+      // Transform data to handle Supabase array responses for relations
+      if (data) {
+        const transformedData = {
+          ...data,
+          repositories: (data.repositories || []).map((repo: any) => ({
+            ...repo,
+            local_mappings: (repo.local_mappings || []).map((mapping: any) => ({
+              ...mapping,
+              user: Array.isArray(mapping.user) ? mapping.user[0] : mapping.user
+            }))
+          }))
+        }
+        setCurrentProject(transformedData)
+      } else {
+        setCurrentProject(null)
+      }
     } catch (error) {
       console.error('Error fetching project data:', error)
       setCurrentProject(null)

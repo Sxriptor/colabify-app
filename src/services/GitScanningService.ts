@@ -408,12 +408,12 @@ export class GitScanningService {
 
       const stats = {
         totalRepositories: data.length,
-        gitRepositories: data.filter(r => r.is_git_repository).length,
-        totalCommits: data.reduce((sum, r) => sum + (r.git_data_commit_count || 0), 0),
-        totalBranches: data.reduce((sum, r) => sum + (r.git_data_branch_count || 0), 0),
-        totalContributors: data.reduce((sum, r) => sum + (r.git_data_contributor_count || 0), 0),
-        repositoriesWithErrors: data.filter(r => r.git_scan_error).length,
-        lastScanDate: data.reduce((latest, r) => {
+        gitRepositories: data.filter((r: any) => r.is_git_repository).length,
+        totalCommits: data.reduce((sum: number, r: any) => sum + (r.git_data_commit_count || 0), 0),
+        totalBranches: data.reduce((sum: number, r: any) => sum + (r.git_data_branch_count || 0), 0),
+        totalContributors: data.reduce((sum: number, r: any) => sum + (r.git_data_contributor_count || 0), 0),
+        repositoriesWithErrors: data.filter((r: any) => r.git_scan_error).length,
+        lastScanDate: data.reduce((latest: Date | null, r: any) => {
           if (!r.git_data_last_updated) return latest
           const date = new Date(r.git_data_last_updated)
           return !latest || date > latest ? date : latest

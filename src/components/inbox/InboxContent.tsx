@@ -95,7 +95,15 @@ export function InboxContent() {
         .order('created_at', { ascending: false })
 
       if (error) throw error
-      setInvitations(data || [])
+
+      // Transform the data to match our interface (Supabase returns arrays for relations)
+      const transformedData = (data || []).map(item => ({
+        ...item,
+        project: Array.isArray(item.project) ? item.project[0] : item.project,
+        inviter: Array.isArray(item.inviter) ? item.inviter[0] : item.inviter
+      }))
+
+      setInvitations(transformedData)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred')
     } finally {

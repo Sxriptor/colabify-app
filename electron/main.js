@@ -78,11 +78,8 @@ function createWindow() {
     backgroundColor: '#ffffff'
   });
 
-  // Load the Next.js app
-  const url = isDev
-    ? 'http://localhost:3000'
-    : `file://${path.join(__dirname, '../out/index.html')}`;
-
+  // Load the Next.js app (always connect to server since we need API routes)
+  const url = 'http://localhost:3000';
   mainWindow.loadURL(url);
 
   // Show window when ready to prevent visual flash
@@ -96,21 +93,11 @@ function createWindow() {
   // Prevent navigation to external URLs (for OAuth flow)
   mainWindow.webContents.on('will-navigate', (event, navigationUrl) => {
     const parsedUrl = new URL(navigationUrl);
-    const currentUrl = new URL(mainWindow.webContents.getURL());
 
-    // Allow navigation within the app
-    if (isDev) {
-      // In dev, only allow localhost:3000
-      if (parsedUrl.origin !== 'http://localhost:3000') {
-        event.preventDefault();
-        console.log('Blocked navigation to:', navigationUrl);
-      }
-    } else {
-      // In production, only allow file:// protocol
-      if (parsedUrl.protocol !== 'file:') {
-        event.preventDefault();
-        console.log('Blocked navigation to:', navigationUrl);
-      }
+    // Allow navigation within the app (always localhost:3000 since we need API routes)
+    if (parsedUrl.origin !== 'http://localhost:3000') {
+      event.preventDefault();
+      console.log('Blocked navigation to:', navigationUrl);
     }
   });
 

@@ -75,7 +75,28 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
 
       if (error) throw error
       console.log('Project data loaded:', data)
-      setProject(data)
+
+      // Transform data to handle Supabase array responses for relations
+      if (data) {
+        const transformedData = {
+          ...data,
+          owner: Array.isArray(data.owner) ? data.owner[0] : data.owner,
+          repositories: (data.repositories || []).map((repo: any) => ({
+            ...repo,
+            local_mappings: (repo.local_mappings || []).map((mapping: any) => ({
+              ...mapping,
+              user: Array.isArray(mapping.user) ? mapping.user[0] : mapping.user
+            }))
+          })),
+          members: (data.members || []).map((member: any) => ({
+            ...member,
+            user: Array.isArray(member.user) ? member.user[0] : member.user
+          }))
+        }
+        setProject(transformedData)
+      } else {
+        setProject(data)
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred')
     } finally {
@@ -335,14 +356,16 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
                           <div className="p-3 bg-gray-50">
                             <h4 className="text-sm font-medium text-gray-700 mb-2">Local Folders:</h4>
                             <div className="space-y-1">
-                              {repo.local_mappings.map((mapping: any) => (
+                              {repo.local_mappings.map((mapping: any) => {
+                                const user = Array.isArray(mapping.user) ? mapping.user[0] : mapping.user
+                                return (
                                 <div key={mapping.id} className="flex items-center justify-between text-sm group">
                                   <span className="text-gray-600 font-mono truncate flex-1" title={mapping.local_path}>
                                     {mapping.local_path}
                                   </span>
                                   <div className="flex items-center space-x-2">
                                     <span className="text-gray-500">
-                                      ({mapping.user.name || mapping.user.email})
+                                      ({user.name || user.email})
                                     </span>
                                     <button
                                       onClick={() => handleRemoveLocalMapping(mapping.id, mapping.local_path)}
@@ -367,7 +390,8 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
                                     </button>
                                   </div>
                                 </div>
-                              ))}
+                                )
+                              })}
                             </div>
                           </div>
                         )}

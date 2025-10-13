@@ -255,11 +255,6 @@ export function CommitHistoryGraph({ commits, branches = [] }: CommitHistoryGrap
         .transition()
         .duration(300)
         .attr('r', activity > 100 ? 12 : activity > 50 ? 10 : 8)
-    })  .duration(300)
-        .attr('r', d => {
-          const activity = (d.additions || 0) + (d.deletions || 0)
-          return activity > 100 ? 12 : activity > 50 ? 10 : 8
-        })
     })
 
     node.on('mouseenter', function(event, d: CommitNode) {
