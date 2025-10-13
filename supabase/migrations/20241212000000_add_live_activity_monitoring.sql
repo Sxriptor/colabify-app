@@ -271,7 +271,7 @@ $$ LANGUAGE plpgsql;
 -- Create a scheduled job to run cleanup (if pg_cron is available)
 -- SELECT cron.schedule('cleanup-activity-data', '0 2 * * *', 'SELECT cleanup_old_activity_data();');
 
--- Verify tables were created
+-- Verify tables were create
 SELECT 
     table_name,
     column_name,
