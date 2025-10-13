@@ -17,9 +17,23 @@
     "public/**/*",
     "package.json",
     "node_modules/**/*",
-    "!node_modules/@img/sharp-*/**/*",
-    "!node_modules/@img/sharp/**/*"
+    "!node_modules/@img/sharp-darwin*",
+    "!node_modules/@img/sharp-linux*",
+    "!node_modules/@img/sharp-win32*",
+    "!node_modules/@img/sharp/libvips*",
+    "!node_modules/@img/sharp-wasm32*",
+    "!node_modules/**/*.darwin.*",
+    "!node_modules/**/*.linux.*",
+    "!node_modules/**/*.win32.*",
+    "!node_modules/**/obj.target/**/*",
+    "!node_modules/**/.deps/**/*"
   ],
+  "nativeRebuilder": null,
+  "nodeGypRebuild": false,
+  "npmRebuild": false,
+  "beforePack": "scripts/before-pack.js",
+  "onNodeModuleFile": "scripts/on-node-module-file.js",
+  "afterPack": "scripts/after-pack.js",
   "mac": {
     "category": "public.app-category.productivity",
     "target": [
