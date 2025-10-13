@@ -29,6 +29,14 @@ export interface GitHubBranch {
   path?: string
   user?: any
   id?: string
+  // Placeholder repository properties
+  isPlaceholder?: boolean
+  notFoundOnPC?: boolean
+  hasError?: boolean
+  gitReadError?: boolean
+  errorMessage?: string
+  usingCachedData?: boolean
+  noCachedData?: boolean
 }
 
 export interface GitHubCommit {

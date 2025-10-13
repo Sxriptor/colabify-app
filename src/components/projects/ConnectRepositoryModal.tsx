@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useAuth } from '@/lib/auth/context'
+import { useSimpleGitScanning } from '@/hooks/useGitScanning'
 
 interface ConnectRepositoryModalProps {
   isOpen: boolean
@@ -13,6 +14,7 @@ interface ConnectRepositoryModalProps {
 
 export function ConnectRepositoryModal({ isOpen, onClose, projectId, onSuccess, hasExistingRepositories = false }: ConnectRepositoryModalProps) {
   const { user } = useAuth()
+  const { scanRepositories, isScanning, lastScanResult, error: scanError } = useSimpleGitScanning()
   const [step, setStep] = useState<'url' | 'folder'>('url')
   const [githubUrl, setGithubUrl] = useState('')
   const [selectedFolders, setSelectedFolders] = useState<string[]>([])
@@ -169,19 +171,94 @@ export function ConnectRepositoryModal({ isOpen, onClose, projectId, onSuccess, 
         repositoryId = newRepo.id
       }
 
-      // Create local folder mappings for each selected folder
-      const folderMappings = selectedFolders.map(folderPath => ({
-        repository_id: repositoryId,
-        user_id: user?.id,
-        local_path: folderPath,
-        project_id: projectId
-      }))
-
-      const { error: mappingError } = await supabase
+      // Check for existing mappings first to avoid duplicates
+      console.log('🔍 Checking for existing local path mappings...')
+      const { data: existingMappings, error: checkMappingsError } = await supabase
         .from('repository_local_mappings')
-        .insert(folderMappings)
+        .select('local_path')
+        .eq('repository_id', repositoryId)
+        .eq('user_id', user?.id)
+        .in('local_path', selectedFolders)
 
-      if (mappingError) throw mappingError
+      if (checkMappingsError) {
+        console.error('❌ Error checking existing mappings:', checkMappingsError)
+        throw checkMappingsError
+      }
+
+      const existingPaths = existingMappings?.map(m => m.local_path) || []
+      const newFolders = selectedFolders.filter(path => !existingPaths.includes(path))
+
+      console.log(`📊 Mapping status: ${existingPaths.length} existing, ${newFolders.length} new`)
+
+      // Show user feedback about existing paths
+      if (existingPaths.length > 0) {
+        console.log(`ℹ️ Skipping ${existingPaths.length} already mapped paths:`, existingPaths)
+        
+        // Set a temporary info message for the user
+        if (existingPaths.length === selectedFolders.length) {
+          setError(`All selected folders are already mapped to this repository. Git data will be refreshed.`)
+        } else {
+          setError(`${existingPaths.length} of ${selectedFolders.length} folders were already mapped. Added ${newFolders.length} new mappings.`)
+        }
+        
+        // Clear the error after a few seconds since it's just informational
+        setTimeout(() => setError(null), 5000)
+      }
+
+      let insertedMappings: any[] = []
+
+      if (newFolders.length > 0) {
+        // Create local folder mappings for new folders only
+        const folderMappings = newFolders.map(folderPath => ({
+          repository_id: repositoryId,
+          user_id: user?.id,
+          local_path: folderPath,
+          project_id: projectId
+        }))
+
+        const { data: newMappings, error: mappingError } = await supabase
+          .from('repository_local_mappings')
+          .insert(folderMappings)
+          .select('id, local_path')
+
+        if (mappingError) throw mappingError
+        insertedMappings = newMappings || []
+        console.log(`✅ Created ${insertedMappings.length} new local path mappings`)
+      }
+
+      // If we have existing mappings, get their IDs for scanning
+      if (existingPaths.length > 0) {
+        const { data: existingMappingData, error: existingError } = await supabase
+          .from('repository_local_mappings')
+          .select('id, local_path')
+          .eq('repository_id', repositoryId)
+          .eq('user_id', user?.id)
+          .in('local_path', existingPaths)
+
+        if (existingError) {
+          console.warn('⚠️ Could not fetch existing mapping IDs:', existingError)
+        } else {
+          insertedMappings.push(...(existingMappingData || []))
+          console.log(`📋 Including ${existingPaths.length} existing mappings for scanning`)
+        }
+      }
+
+      // After successfully creating mappings, scan Git repositories and cache the data
+      if (insertedMappings && insertedMappings.length > 0) {
+        console.log('📚 Scanning Git repositories for cache data...')
+        const scanResult = await scanRepositories(insertedMappings, supabase, {
+          maxCommits: 2000,
+          includeBranches: true,
+          includeRemotes: true,
+          includeStats: true,
+          forceRefresh: true // Always scan new repositories
+        })
+        
+        // Show scan results to user
+        if (scanResult && scanResult.successful > 0) {
+          console.log(`🎉 Successfully scanned ${scanResult.successful} repositories with ${scanResult.totalCommits} total commits`)
+        }
+      }
 
       onSuccess()
       onClose()
@@ -234,9 +311,38 @@ export function ConnectRepositoryModal({ isOpen, onClose, projectId, onSuccess, 
         </div>
 
         <div className="px-6 py-4">
-          {error && (
+          {(error || scanError) && (
             <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md">
-              <p className="text-sm text-red-600">{error}</p>
+              <p className="text-sm text-red-600">{error || scanError}</p>
+            </div>
+          )}
+
+          {lastScanResult && lastScanResult.errors.length > 0 && (
+            <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
+              <p className="text-sm text-yellow-800 font-medium mb-2">
+                Some repositories had scanning issues:
+              </p>
+              <ul className="text-sm text-yellow-700 space-y-1">
+                {lastScanResult.errors.slice(0, 3).map((err, index) => (
+                  <li key={index} className="truncate">
+                    • {err.path}: {err.error}
+                  </li>
+                ))}
+                {lastScanResult.errors.length > 3 && (
+                  <li className="text-xs">
+                    ... and {lastScanResult.errors.length - 3} more
+                  </li>
+                )}
+              </ul>
+            </div>
+          )}
+
+          {lastScanResult && lastScanResult.successful > 0 && (
+            <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-md">
+              <p className="text-sm text-green-800">
+                ✅ Successfully scanned {lastScanResult.successful} repositories 
+                ({lastScanResult.totalCommits} commits, {lastScanResult.totalBranches} branches)
+              </p>
             </div>
           )}
 
@@ -370,16 +476,16 @@ export function ConnectRepositoryModal({ isOpen, onClose, projectId, onSuccess, 
           
           <button
             onClick={step === 'url' ? handleUrlSubmit : handleSubmit}
-            disabled={loading || (step === 'url' && !githubUrl.trim()) || (step === 'folder' && selectedFolders.length === 0)}
+            disabled={loading || isScanning || (step === 'url' && !githubUrl.trim()) || (step === 'folder' && selectedFolders.length === 0)}
             className="px-4 py-2 text-sm font-medium text-white bg-gray-800 hover:bg-gray-900 rounded-md disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {loading ? (
+            {loading || isScanning ? (
               <>
                 <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white inline" fill="none" viewBox="0 0 24 24">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                 </svg>
-                Connecting...
+                {isScanning ? 'Scanning Git Data...' : 'Connecting...'}
               </>
             ) : step === 'url' ? (
               'Next'

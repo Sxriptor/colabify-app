@@ -24,6 +24,7 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
   const [showAddFolderModal, setShowAddFolderModal] = useState(false)
   const [selectedRepository, setSelectedRepository] = useState<any>(null)
   const [refreshTrigger, setRefreshTrigger] = useState(0)
+  const [deletingMappingId, setDeletingMappingId] = useState<string | null>(null)
 
   useEffect(() => {
     fetchProject()
@@ -102,6 +103,73 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
   const handleLocalFolderAdded = async () => {
     // Refresh project data to show new local mappings
     await fetchProject()
+  }
+
+  const handleRemoveLocalMapping = async (mappingId: string, localPath: string) => {
+    // Prevent multiple clicks
+    if (deletingMappingId) {
+      return
+    }
+
+    // Show confirmation dialog
+    const confirmed = window.confirm(
+      `Are you sure you want to remove this local path mapping?\n\n` +
+      `Path: ${localPath}\n\n` +
+      `This will also clear any cached Git data for this repository.`
+    )
+
+    if (!confirmed) {
+      return
+    }
+
+    setDeletingMappingId(mappingId)
+
+    try {
+      // Use the same client approach as fetchProject
+      const { createElectronClient } = await import('@/lib/supabase/electron-client')
+      
+      let supabase
+      try {
+        supabase = await createElectronClient()
+      } catch (clientError) {
+        console.error('Failed to create Electron client:', clientError)
+        alert('Authentication error. Please try refreshing the page.')
+        return
+      }
+
+      // Direct deletion - let RLS policies handle security
+      const { error } = await supabase
+        .from('repository_local_mappings')
+        .delete()
+        .eq('id', mappingId)
+
+      if (error) {
+        console.error('Error removing local mapping:', error)
+        
+        // If JWT expired, suggest refresh
+        if (error.message?.includes('JWT expired') || error.code === 'PGRST303') {
+          alert('Your session has expired. Please refresh the page and try again.')
+        } else {
+          alert(`Failed to remove local path mapping: ${error.message}`)
+        }
+        return
+      }
+
+      // Refresh project data to reflect the removal
+      await fetchProject()
+      
+    } catch (err) {
+      console.error('Error removing local mapping:', err)
+      
+      // Check if it's an authentication error
+      if (err instanceof Error && (err.message.includes('JWT') || err.message.includes('401'))) {
+        alert('Your session has expired. Please refresh the page and try again.')
+      } else {
+        alert('Failed to remove local path mapping')
+      }
+    } finally {
+      setDeletingMappingId(null)
+    }
   }
 
   if (loading) {
@@ -268,13 +336,36 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
                             <h4 className="text-sm font-medium text-gray-700 mb-2">Local Folders:</h4>
                             <div className="space-y-1">
                               {repo.local_mappings.map((mapping: any) => (
-                                <div key={mapping.id} className="flex items-center justify-between text-sm">
+                                <div key={mapping.id} className="flex items-center justify-between text-sm group">
                                   <span className="text-gray-600 font-mono truncate flex-1" title={mapping.local_path}>
                                     {mapping.local_path}
                                   </span>
-                                  <span className="text-gray-500 ml-2">
-                                    ({mapping.user.name || mapping.user.email})
-                                  </span>
+                                  <div className="flex items-center space-x-2">
+                                    <span className="text-gray-500">
+                                      ({mapping.user.name || mapping.user.email})
+                                    </span>
+                                    <button
+                                      onClick={() => handleRemoveLocalMapping(mapping.id, mapping.local_path)}
+                                      disabled={deletingMappingId === mapping.id}
+                                      className={`opacity-0 group-hover:opacity-100 transition-opacity duration-200 p-1 rounded ${
+                                        deletingMappingId === mapping.id 
+                                          ? 'text-gray-300 cursor-not-allowed' 
+                                          : 'text-gray-400 hover:text-red-500 hover:bg-gray-100'
+                                      }`}
+                                      title={deletingMappingId === mapping.id ? "Removing..." : "Remove local path mapping and clear cached data"}
+                                    >
+                                      {deletingMappingId === mapping.id ? (
+                                        <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                        </svg>
+                                      ) : (
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                        </svg>
+                                      )}
+                                    </button>
+                                  </div>
                                 </div>
                               ))}
                             </div>
