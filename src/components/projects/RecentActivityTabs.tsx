@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { LiveActivityPanel } from './LiveActivityPanel'
+import { LocalChangesPanel } from './LocalChangesPanel'
 import { useGitMonitoring } from '@/hooks/useGitMonitoring'
 import { useAuth } from '@/lib/auth/context'
 
@@ -38,24 +39,9 @@ export function RecentActivityTabs({ project }: RecentActivityTabsProps) {
       
       case 'local':
         return (
-          <div className="p-6">
-            <div className="text-center py-8">
-              <div className="text-4xl mb-4">💻</div>
-              <h3 className="text-lg font-medium text-gray-900 mb-2">Local Repository Changes</h3>
-              <p className="text-sm text-gray-500 mb-4">
-                Track uncommitted changes, branch switches, and local git operations
-              </p>
-              <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-left">
-                <h4 className="font-medium text-gray-900 mb-2">Coming Soon:</h4>
-                <ul className="text-sm text-gray-600 space-y-1">
-                  <li>• Working directory status</li>
-                  <li>• Staged/unstaged changes</li>
-                  <li>• Local branch operations</li>
-                  <li>• File modification tracking</li>
-                </ul>
-              </div>
-            </div>
-          </div>
+          <LocalChangesPanel
+            project={project}
+          />
         )
       
       case 'remote':
