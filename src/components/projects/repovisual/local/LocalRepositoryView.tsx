@@ -2,7 +2,7 @@ import { GitHubBranch, GitHubCommit, LocalUserLocation, DataSource } from '../ty
 import { getLocalRepositoryInfo } from '../utils'
 import { StatusCard } from '../shared/StatusCard'
 import { BackendStatus } from '../shared/BackendStatus'
-import { CommitFrequencyChart } from '../shared/CommitFrequencyChart'
+
 import { LocalBranchList } from './LocalBranchList'
 import { RecentActivity } from './RecentActivity'
 import { LocalActivityLog } from './LocalActivityLog'
@@ -10,6 +10,7 @@ import { TeamStatus } from './TeamStatus'
 import { CommitBubbles } from './CommitBubbles'
 import { BranchTimeline } from './BranchTimeline'
 import { ContributorGraph } from './ContributorGraph'
+import { ContributionCalendar } from './ContributionCalendar'
 
 interface LocalRepositoryViewProps {
   branches: GitHubBranch[]
@@ -95,7 +96,8 @@ export function LocalRepositoryView({
         <ContributorGraph commits={commits} />
       </div>
 
-      <CommitFrequencyChart commits={commits} />
+      {/* GitHub-style Contribution Calendar */}
+      <ContributionCalendar commits={commits} />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         <LocalActivityLog commits={commits} />
