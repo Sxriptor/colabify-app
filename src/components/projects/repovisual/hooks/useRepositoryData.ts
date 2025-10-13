@@ -170,26 +170,59 @@ export function useRepositoryData(isOpen: boolean, project: any) {
       }
       
       console.log('🔍 Attempting to fetch GitHub data for Remote tab...')
-      if (project.repositories?.[0]?.url) {
-        try {
-          const repo = project.repositories[0]
-          const urlParts = repo.url.replace('https://github.com/', '').split('/')
-          const owner = urlParts[0]
-          const repoName = urlParts[1]?.replace(/\.git$/, '')
-
-          if (owner && repoName) {
-            console.log(`📡 Fetching GitHub branches for ${owner}/${repoName}`)
-            await dataFetchers.fetchGitHubBranches(owner, repoName, setGithubDataSource, setError)
-          } else {
-            console.warn('⚠️ Could not parse owner/repo from URL:', repo.url)
-            setGithubDataSource('disconnected')
+      
+      // Try to get GitHub repo info from local Git remotes first
+      let githubOwner = null
+      let githubRepo = null
+      
+      for (const branch of allBranches) {
+        if (branch.remoteUrls) {
+          const originUrl = branch.remoteUrls.origin || Object.values(branch.remoteUrls)[0]
+          if (originUrl && typeof originUrl === 'string') {
+            try {
+              let cleanUrl = originUrl
+              if (cleanUrl.startsWith('git@github.com:')) {
+                cleanUrl = cleanUrl.replace('git@github.com:', 'https://github.com/')
+              }
+              if (cleanUrl.includes('github.com')) {
+                const match = cleanUrl.match(/github\.com[\/:]([^\/]+)\/([^\/]+?)(?:\.git)?(?:\/)?$/)
+                if (match) {
+                  githubOwner = match[1]
+                  githubRepo = match[2]
+                  break
+                }
+              }
+            } catch (error) {
+              console.warn('Failed to parse Git remote URL:', originUrl, error)
+            }
           }
+        }
+      }
+      
+      // Fallback to project configuration if no remote found
+      if (!githubOwner || !githubRepo) {
+        if (project.repositories?.[0]?.url) {
+          try {
+            const repo = project.repositories[0]
+            const urlParts = repo.url.replace('https://github.com/', '').replace(/\.git$/, '').split('/')
+            githubOwner = urlParts[0]
+            githubRepo = urlParts[1]
+          } catch (error) {
+            console.warn('⚠️ Could not parse owner/repo from project URL:', project.repositories[0].url)
+          }
+        }
+      }
+
+      if (githubOwner && githubRepo) {
+        try {
+          console.log(`📡 Fetching GitHub branches for ${githubOwner}/${githubRepo}`)
+          await dataFetchers.fetchGitHubBranches(githubOwner, githubRepo, setGithubDataSource, setError)
         } catch (githubError) {
           console.error('❌ Error fetching GitHub data:', githubError)
           setGithubDataSource('disconnected')
         }
       } else {
-        console.log('⚠️ No remote repository URL configured')
+        console.log('⚠️ No GitHub repository information found')
         setGithubDataSource('disconnected')
       }
       

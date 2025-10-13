@@ -270,6 +270,10 @@ export const fetchGitHubBranches = async (
           setError('GitHub token invalid or expired. Please sign in again.')
         } else if (response.status === 403) {
           setError('GitHub API rate limit exceeded. Please sign in to increase limits.')
+        } else if (response.status === 404) {
+          setError(`Repository ${owner}/${repo} not found or not accessible. Check if the repository exists and you have access.`)
+        } else {
+          setError(`GitHub API error: ${response.status} ${response.statusText}`)
         }
       }
     } catch (apiError) {

@@ -17,9 +17,9 @@ export const getLocalRepositoryInfo = (repoConfig: any, project: any) => {
   let ownerName = 'local'
   if (repoConfig.remoteUrls) {
     const originUrl = repoConfig.remoteUrls.origin || Object.values(repoConfig.remoteUrls)[0]
-    if (originUrl) {
+    if (originUrl && typeof originUrl === 'string') {
       try {
-        let cleanUrl = originUrl as string
+        let cleanUrl = originUrl
         if (cleanUrl.startsWith('git@github.com:')) {
           cleanUrl = cleanUrl.replace('git@github.com:', 'https://github.com/')
         }
@@ -63,9 +63,9 @@ export const getRemoteRepositoryInfo = (repoConfig: any, project: any) => {
 
   if (repoConfig.remoteUrls) {
     const originUrl = repoConfig.remoteUrls.origin || Object.values(repoConfig.remoteUrls)[0]
-    if (originUrl) {
+    if (originUrl && typeof originUrl === 'string') {
       try {
-        let cleanUrl = originUrl as string
+        let cleanUrl = originUrl
         if (cleanUrl.startsWith('git@github.com:')) {
           cleanUrl = cleanUrl.replace('git@github.com:', 'https://github.com/')
         }
