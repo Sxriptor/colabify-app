@@ -34,21 +34,115 @@ interface LiveActivityPanelProps {
 
 export function LiveActivityPanel({ project }: LiveActivityPanelProps) {
   const { user } = useAuth()
-  const { 
-    status, 
-    isElectron,
+  const {
+    status,
+    isElectron: isElectronFromHook,
     getTeamAwareness,
-    getRecentActivities 
+    getRecentActivities
   } = useGitMonitoring()
-  
+
   const [activities, setActivities] = useState<LiveActivity[]>([])
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([])
   const [loading, setLoading] = useState(false)
 
+  // Check if we're in Electron environment (use electronAPI instead of electron)
+  const isElectron = typeof window !== 'undefined' && (window as any).electronAPI
+
+  // Helper function to check if a local path is accessible
+  const checkPathAccessibility = async (localPath: string): Promise<boolean> => {
+    if (!isElectron) {
+      console.log('❌ Not in Electron environment (electronAPI not found)')
+      return false
+    }
+
+    try {
+      const electronAPI = (window as any).electronAPI
+      if (electronAPI && electronAPI.git && electronAPI.git.readDirectGitState) {
+        const state = await electronAPI.git.readDirectGitState(localPath)
+        console.log(`✅ Path ${localPath} is accessible, state:`, state)
+        return true
+      }
+      console.log('❌ Git API not available')
+      return false
+    } catch (error) {
+      console.log(`❌ Path ${localPath} is not accessible:`, error)
+      return false
+    }
+  }
+
+  // Helper function to read live git data from an accessible path
+  const readLiveGitData = async (localPath: string) => {
+    if (!isElectron) return null
+
+    try {
+      const electronAPI = (window as any).electronAPI
+      if (electronAPI && electronAPI.git) {
+        console.log(`🔍 Reading git state for ${localPath}`)
+
+        // Get git state
+        const gitState = await electronAPI.git.readDirectGitState(localPath)
+        console.log(`📊 Git state:`, gitState)
+
+        // Try to get complete history
+        let recentCommits = []
+        if (electronAPI.git.readCompleteHistory) {
+          try {
+            console.log(`📚 Reading complete history for ${localPath}`)
+            const history = await electronAPI.git.readCompleteHistory(localPath, {
+              maxCommits: 10,
+              includeBranches: true,
+              includeStats: true
+            })
+            console.log(`📜 History result:`, history)
+
+            if (history && history.commits) {
+              recentCommits = history.commits.slice(0, 5).map((commit: any) => ({
+                sha: commit.sha,
+                message: commit.message,
+                date: commit.date,
+                author: commit.author,
+                branch: commit.branch
+              }))
+              console.log(`✅ Extracted ${recentCommits.length} recent commits`)
+            }
+          } catch (historyError) {
+            console.warn('⚠️ Could not read complete history:', historyError)
+          }
+        } else {
+          console.warn('⚠️ readCompleteHistory not available')
+        }
+
+        const result = {
+          branch: gitState?.branch || 'main',
+          head: gitState?.head,
+          lastCommitMessage: recentCommits[0]?.message,
+          lastActivity: recentCommits[0]?.date || new Date().toISOString(),
+          lastModifiedFile: undefined,
+          recentCommits
+        }
+
+        console.log(`📦 Final git data:`, result)
+        return result
+      }
+      console.warn('⚠️ Git API not available')
+      return null
+    } catch (error) {
+      console.error(`❌ Error reading live git data from ${localPath}:`, error)
+      return null
+    }
+  }
+
   // Check if project is being watched (from database or Electron backend)
   const isWatchingInDatabase = project?.watches?.some((watch: any) => watch.user_id === user?.id) || false
-  const isWatchingInBackend = isElectron ? status.watchedProjects.includes(project.id) : false
+  const isWatchingInBackend = isElectronFromHook ? status.watchedProjects.includes(project.id) : false
   const isWatching = isWatchingInDatabase || isWatchingInBackend
+
+  console.log('🔍 Electron detection:', {
+    isElectron: !!isElectron,
+    isElectronFromHook: !!isElectronFromHook,
+    hasElectronAPI: !!(window as any).electronAPI,
+    hasGitAPI: !!((window as any).electronAPI?.git)
+  })
 
   // Debug logging
   useEffect(() => {
@@ -73,27 +167,171 @@ export function LiveActivityPanel({ project }: LiveActivityPanelProps) {
   useEffect(() => {
     const fetchData = async () => {
       if (isWatching) {
-        if (isElectron && status.isRunning && isWatchingInBackend) {
-          // Use real data from Electron backend
-          setLoading(true)
-          try {
-            const [teamData, activityData] = await Promise.all([
-              getTeamAwareness(project.id),
-              getRecentActivities(project.id, 20)
-            ])
-            
-            setTeamMembers(teamData)
-            setActivities(activityData)
-          } catch (error) {
-            console.error('Failed to fetch live data:', error)
-            // Fall back to mock data
+        setLoading(true)
+        try {
+          // Get repository local mappings for the project
+          const { createElectronClient } = await import('@/lib/supabase/electron-client')
+          const supabase = await createElectronClient()
+
+          const { data: repositories, error: repoError } = await supabase
+            .from('repositories')
+            .select(`
+              id,
+              name,
+              full_name,
+              local_mappings:repository_local_mappings(
+                id,
+                local_path,
+                user_id,
+                user:users(id, name, email, avatar_url)
+              )
+            `)
+            .eq('project_id', project.id)
+
+          if (repoError) {
+            console.error('Error fetching repositories:', repoError)
             loadMockData()
-          } finally {
-            setLoading(false)
+            return
           }
-        } else {
-          // Use mock data when watching but backend not available
+
+          console.log('📦 Fetched repositories:', repositories)
+
+          // Check which local paths are accessible and fetch live data
+          const teamData: TeamMember[] = []
+          const activityData: LiveActivity[] = []
+
+          if (repositories && repositories.length > 0) {
+            for (const repo of repositories) {
+              if (repo.local_mappings && repo.local_mappings.length > 0) {
+                for (const mapping of repo.local_mappings) {
+                  try {
+                    console.log(`🔍 Checking mapping for user ${mapping.user.name}:`, mapping.local_path)
+
+                    // Check if we can access this local path
+                    const isAccessible = await checkPathAccessibility(mapping.local_path)
+                    console.log(`📍 Path ${mapping.local_path} accessible:`, isAccessible)
+
+                    if (isAccessible && isElectron) {
+                      // Use live .git data for accessible paths
+                      const gitData = await readLiveGitData(mapping.local_path)
+                      console.log(`📊 Git data for ${mapping.local_path}:`, gitData)
+
+                      if (gitData) {
+                        teamData.push({
+                          userId: mapping.user_id,
+                          userName: mapping.user.name || mapping.user.email,
+                          status: 'active',
+                          currentBranch: gitData.branch,
+                          currentFile: gitData.lastModifiedFile,
+                          lastCommitMessage: gitData.lastCommitMessage,
+                          workingOn: gitData.lastCommitMessage || `Working on ${gitData.branch}`,
+                          lastSeen: new Date(gitData.lastActivity),
+                          isOnline: true
+                        })
+
+                        // Add recent commits as activities
+                        if (gitData.recentCommits && gitData.recentCommits.length > 0) {
+                          console.log(`💾 Adding ${gitData.recentCommits.length} commits to activities`)
+                          gitData.recentCommits.forEach((commit: any) => {
+                            activityData.push({
+                              id: commit.sha,
+                              userId: mapping.user_id,
+                              userName: mapping.user.name || mapping.user.email,
+                              activityType: 'COMMIT',
+                              activityData: { subject: commit.message },
+                              branchName: commit.branch || gitData.branch,
+                              commitHash: commit.sha,
+                              occurredAt: new Date(commit.date)
+                            })
+                          })
+                        }
+                      } else {
+                        console.warn(`⚠️ No git data returned for ${mapping.local_path}`)
+                      }
+                    } else {
+                      console.log(`📝 Using fallback data for inaccessible path ${mapping.local_path}`)
+                      // Use repository_local_mappings data for inaccessible paths
+                      teamData.push({
+                        userId: mapping.user_id,
+                        userName: mapping.user.name || mapping.user.email,
+                        status: 'away',
+                        currentBranch: undefined,
+                        workingOn: `Working on ${repo.name}`,
+                        lastSeen: new Date(),
+                        isOnline: false
+                      })
+                    }
+                  } catch (error) {
+                    console.error(`Error processing mapping for ${mapping.local_path}:`, error)
+                    // Fall back to basic info from database
+                    teamData.push({
+                      userId: mapping.user_id,
+                      userName: mapping.user.name || mapping.user.email,
+                      status: 'away',
+                      workingOn: `Working on ${repo.name}`,
+                      lastSeen: new Date(),
+                      isOnline: false
+                    })
+                  }
+                }
+              }
+            }
+          }
+
+          // If using Electron backend and it's running, also get backend data
+          if (isElectronFromHook && status.isRunning && isWatchingInBackend) {
+            try {
+              const [backendTeamData, backendActivityData] = await Promise.all([
+                getTeamAwareness(project.id),
+                getRecentActivities(project.id, 20)
+              ])
+
+              // Merge backend data with database data, preferring more detailed backend data
+              backendTeamData.forEach(member => {
+                const existingIndex = teamData.findIndex(m => m.userId === member.userId)
+                if (existingIndex >= 0) {
+                  // Update existing member with more detailed backend data
+                  teamData[existingIndex] = {
+                    ...teamData[existingIndex],
+                    ...member,
+                    // Keep userName from database if backend doesn't have it
+                    userName: member.userName || teamData[existingIndex].userName
+                  }
+                } else {
+                  teamData.push(member)
+                }
+              })
+
+              backendActivityData.forEach(activity => {
+                if (!activityData.find(a => a.id === activity.id)) {
+                  activityData.push(activity)
+                }
+              })
+            } catch (error) {
+              console.error('Failed to fetch backend data:', error)
+            }
+          }
+
+          // Deduplicate team members by userId (just in case)
+          const uniqueTeamData = Array.from(
+            new Map(teamData.map(member => [member.userId, member])).values()
+          )
+
+          // Sort activities by date
+          activityData.sort((a, b) => b.occurredAt.getTime() - a.occurredAt.getTime())
+
+          setTeamMembers(uniqueTeamData)
+          setActivities(activityData.slice(0, 20))
+
+          // If no data found, load mock data
+          if (uniqueTeamData.length === 0 && activityData.length === 0) {
+            loadMockData()
+          }
+        } catch (error) {
+          console.error('Failed to fetch live data:', error)
           loadMockData()
+        } finally {
+          setLoading(false)
         }
       } else {
         setActivities([])
@@ -282,17 +520,24 @@ export function LiveActivityPanel({ project }: LiveActivityPanelProps) {
                         {member.userName}
                       </span>
                       {member.currentBranch && (
-                        <span className="text-blue-600 text-xs bg-blue-50 px-2 py-1 rounded">
-                          {member.currentBranch}
+                        <span className="text-blue-600 text-xs bg-blue-50 px-2 py-1 rounded font-mono">
+                          🔀 {member.currentBranch}
                         </span>
                       )}
                     </div>
-                    <div className="text-gray-600 text-xs truncate">
-                      {member.workingOn || 'Active'}
-                    </div>
+                    {member.lastCommitMessage && (
+                      <div className="text-gray-700 text-xs truncate mt-1">
+                        💬 {member.lastCommitMessage}
+                      </div>
+                    )}
                     {member.currentFile && (
-                      <div className="text-gray-500 text-xs truncate">
+                      <div className="text-gray-500 text-xs truncate mt-1">
                         📄 {member.currentFile}
+                      </div>
+                    )}
+                    {!member.lastCommitMessage && !member.currentFile && (
+                      <div className="text-gray-600 text-xs truncate mt-1">
+                        {member.workingOn || 'Active'}
                       </div>
                     )}
                   </div>
