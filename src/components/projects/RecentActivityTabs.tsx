@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { LiveActivityPanel } from './LiveActivityPanel'
 import { LocalChangesPanel } from './LocalChangesPanel'
+import { RemoteUpdatesPanel } from './RemoteUpdatesPanel'
 import { useGitMonitoring } from '@/hooks/useGitMonitoring'
 import { useAuth } from '@/lib/auth/context'
 
@@ -46,24 +47,9 @@ export function RecentActivityTabs({ project }: RecentActivityTabsProps) {
       
       case 'remote':
         return (
-          <div className="p-6">
-            <div className="text-center py-8">
-              <div className="text-4xl mb-4">🌐</div>
-              <h3 className="text-lg font-medium text-gray-900 mb-2">Remote Repository Updates</h3>
-              <p className="text-sm text-gray-500 mb-4">
-                Monitor GitHub activity, pull requests, and remote branch changes
-              </p>
-              <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-left">
-                <h4 className="font-medium text-gray-900 mb-2">Coming Soon:</h4>
-                <ul className="text-sm text-gray-600 space-y-1">
-                  <li>• GitHub webhook events</li>
-                  <li>• Pull request activity</li>
-                  <li>• Remote branch updates</li>
-                  <li>• Issue and discussion activity</li>
-                </ul>
-              </div>
-            </div>
-          </div>
+          <RemoteUpdatesPanel
+            project={project}
+          />
         )
       
       default:
