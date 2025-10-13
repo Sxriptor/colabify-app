@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useAuth } from '@/lib/auth/context'
+import { useSimpleGitScanning } from '@/hooks/useGitScanning'
 
 interface AddLocalFolderModalProps {
   isOpen: boolean
@@ -21,6 +22,7 @@ export function AddLocalFolderModal({
   onSuccess 
 }: AddLocalFolderModalProps) {
   const { user } = useAuth()
+  const { scanRepositories, isScanning, lastScanResult, error: scanError } = useSimpleGitScanning()
   const [selectedFolders, setSelectedFolders] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -61,6 +63,38 @@ export function AddLocalFolderModal({
     setSelectedFolders(selectedFolders.filter(path => path !== pathToRemove))
   }
 
+  const scanAndCacheGitData = async (mappings: any[], supabase: any) => {
+    console.log(`📚 Starting Git data scanning for ${mappings.length} repositories...`)
+    
+    const result = await scanRepositories(mappings, supabase, {
+      maxCommits: 2000,
+      includeBranches: true,
+      includeRemotes: true,
+      includeStats: true,
+      forceRefresh: true // Always scan new repositories
+    })
+
+    if (result) {
+      console.log(`📊 Git scanning complete:`, result)
+      console.log(`✅ Successfully scanned: ${result.successful}`)
+      console.log(`❌ Failed: ${result.failed}`)
+      console.log(`⏭️ Skipped: ${result.skipped}`)
+      console.log(`📈 Total commits cached: ${result.totalCommits}`)
+      console.log(`🌿 Total branches cached: ${result.totalBranches}`)
+      console.log(`👥 Total contributors: ${result.totalContributors}`)
+
+      // Log any errors for debugging
+      if (result.errors.length > 0) {
+        console.warn(`⚠️ Scan errors:`)
+        result.errors.forEach(error => {
+          console.warn(`  - ${error.path}: ${error.error}`)
+        })
+      }
+    }
+
+    return result
+  }
+
   const handleSubmit = async () => {
     if (selectedFolders.length === 0) {
       setError('Please select at least one local folder')
@@ -83,11 +117,23 @@ export function AddLocalFolderModal({
         project_id: projectId
       }))
 
-      const { error: mappingError } = await supabase
+      const { data: insertedMappings, error: mappingError } = await supabase
         .from('repository_local_mappings')
         .insert(folderMappings)
+        .select('id, local_path')
 
       if (mappingError) throw mappingError
+
+      // After successfully creating mappings, scan Git repositories and cache the data
+      if (insertedMappings && insertedMappings.length > 0) {
+        console.log('📚 Scanning Git repositories for cache data...')
+        const scanResult = await scanAndCacheGitData(insertedMappings, supabase)
+        
+        // Show scan results to user
+        if (scanResult && scanResult.successful > 0) {
+          console.log(`🎉 Successfully scanned ${scanResult.successful} repositories with ${scanResult.totalCommits} total commits`)
+        }
+      }
 
       onSuccess()
       onClose()
@@ -135,9 +181,38 @@ export function AddLocalFolderModal({
         </div>
 
         <div className="px-6 py-4">
-          {error && (
+          {(error || scanError) && (
             <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md">
-              <p className="text-sm text-red-600">{error}</p>
+              <p className="text-sm text-red-600">{error || scanError}</p>
+            </div>
+          )}
+
+          {lastScanResult && lastScanResult.errors.length > 0 && (
+            <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
+              <p className="text-sm text-yellow-800 font-medium mb-2">
+                Some repositories had scanning issues:
+              </p>
+              <ul className="text-sm text-yellow-700 space-y-1">
+                {lastScanResult.errors.slice(0, 3).map((err, index) => (
+                  <li key={index} className="truncate">
+                    • {err.path}: {err.error}
+                  </li>
+                ))}
+                {lastScanResult.errors.length > 3 && (
+                  <li className="text-xs">
+                    ... and {lastScanResult.errors.length - 3} more
+                  </li>
+                )}
+              </ul>
+            </div>
+          )}
+
+          {lastScanResult && lastScanResult.successful > 0 && (
+            <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-md">
+              <p className="text-sm text-green-800">
+                ✅ Successfully scanned {lastScanResult.successful} repositories 
+                ({lastScanResult.totalCommits} commits, {lastScanResult.totalBranches} branches)
+              </p>
             </div>
           )}
 
@@ -199,16 +274,16 @@ export function AddLocalFolderModal({
           
           <button
             onClick={handleSubmit}
-            disabled={loading || selectedFolders.length === 0}
+            disabled={loading || isScanning || selectedFolders.length === 0}
             className="px-4 py-2 text-sm font-medium text-white bg-gray-800 hover:bg-gray-900 rounded-md disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {loading ? (
+            {loading || isScanning ? (
               <>
                 <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white inline" fill="none" viewBox="0 0 24 24">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                 </svg>
-                Adding...
+                {isScanning ? 'Scanning Git Data...' : 'Adding...'}
               </>
             ) : (
               'Add Folders'
