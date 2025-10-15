@@ -420,8 +420,12 @@ class GitDataManagerService {
 
             allUncommittedChanges.push(...uncommittedChanges)
 
-            // Sync file changes to dataase if there are uncommitted changes
+            // Debug logging for file changes
+            console.log(`🔍 [GitDataManager] ${repo.name} - uncommittedChanges: ${uncommittedChanges.length}, fileChanges: ${gitState.fileChanges?.length || 0}`)
+
+            // Sync file changes to database if there are uncommitted changes
             if (uncommittedChanges.length > 0 && gitState.fileChanges) {
+              console.log(`📤 [GitDataManager] Syncing ${gitState.fileChanges.length} file changes for ${repo.name}...`)
               try {
                 await this.syncFileChangesToDatabase(
                   projectId,
@@ -429,9 +433,15 @@ class GitDataManagerService {
                   repo.id,
                   gitState.fileChanges
                 )
-                console.log(`💾 [GitDataManager] Synced ${gitState.fileChanges.length} file changes for ${repo.name}`)
+                console.log(`💾 [GitDataManager] Successfully synced ${gitState.fileChanges.length} file changes for ${repo.name}`)
               } catch (syncError) {
                 console.error(`❌ [GitDataManager] Failed to sync file changes:`, syncError)
+              }
+            } else {
+              if (uncommittedChanges.length === 0) {
+                console.log(`ℹ️ [GitDataManager] ${repo.name} - No uncommitted changes to sync`)
+              } else if (!gitState.fileChanges) {
+                console.log(`⚠️ [GitDataManager] ${repo.name} - Uncommitted changes detected but no fileChanges in gitState`)
               }
             }
 
