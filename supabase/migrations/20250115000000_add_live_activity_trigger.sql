@@ -1,13 +1,14 @@
--- Create trigger to automatically insert live_activity when git_data_cache is updated
+-- Create trigger to automatically update live_activity when git_data_cache is updated
 -- This extracts the first (most recent) commit from the cached git data
+-- One session per project, but one live_activity row per local mapping
 
--- Function to extract first commit and insert as live activity
+-- Function to extract first commit and upsert as live activity
 CREATE OR REPLACE FUNCTION insert_live_activity_from_git_cache()
 RETURNS TRIGGER AS $$
 DECLARE
   first_commit JSONB;
-  session_id UUID;
   repo_record RECORD;
+  existing_session_id UUID;
 BEGIN
   -- Only process if git_data_cache has commits
   IF NEW.git_data_cache IS NULL OR
@@ -26,7 +27,7 @@ BEGIN
   END IF;
 
   -- Get repository information to find project_id
-  SELECT r.project_id, r.id
+  SELECT r.project_id, r.id, r.url
   INTO repo_record
   FROM repositories r
   WHERE r.id = NEW.repository_id;
@@ -36,44 +37,54 @@ BEGIN
     RETURN NEW;
   END IF;
 
-  -- Create or get session ID for this local mapping
-  -- We'll use a deterministic session ID based on the mapping
-  session_id := gen_random_uuid();
+  -- Get or create ONE session per project (not per local mapping)
+  SELECT id INTO existing_session_id
+  FROM live_activity_sessions
+  WHERE project_id = repo_record.project_id
+    AND user_id = NEW.user_id
+  LIMIT 1;
 
-  -- Check if we need to create/update a session
-  INSERT INTO live_activity_sessions (
-    id,
-    user_id,
-    project_id,
-    repository_id,
-    local_path,
-    session_start,
-    last_activity,
-    is_active,
-    current_branch,
-    current_head,
-    ahead_count,
-    behind_count
-  ) VALUES (
-    session_id,
-    NEW.user_id,
-    repo_record.project_id,
-    NEW.repository_id,
-    NEW.local_path,
-    NOW(),
-    NOW(),
-    true,
-    NEW.git_current_branch,
-    first_commit->>'sha',
-    0,
-    0
-  )
-  ON CONFLICT (id) DO UPDATE SET
-    last_activity = NOW(),
-    current_branch = EXCLUDED.current_branch,
-    current_head = EXCLUDED.current_head;
+  IF existing_session_id IS NULL THEN
+    -- Create new session for this project
+    existing_session_id := gen_random_uuid();
 
-  -- Insert the commit as a live activity
+    INSERT INTO live_activity_sessions (
+      id,
+      user_id,
+      project_id,
+      repository_id,
+      local_path,
+      session_start,
+      last_activity,
+      is_active,
+      current_branch,
+      current_head,
+      ahead_count,
+      behind_count
+    ) VALUES (
+      existing_session_id,
+      NEW.user_id,
+      repo_record.project_id,
+      NEW.repository_id,
+      NEW.local_path,
+      NOW(),
+      NOW(),
+      true,
+      NEW.git_current_branch,
+      first_commit->>'sha',
+      0,
+      0
+    );
+  ELSE
+    -- Update existing session
+    UPDATE live_activity_sessions
+    SET
+      last_activity = NOW()
+    WHERE id = existing_session_id;
+  END IF;
+
+  -- Upsert live activity - one row per local mapping
+  -- Use local_path as unique identifier
   INSERT INTO live_activities (
     session_id,
     user_id,
@@ -83,9 +94,10 @@ BEGIN
     activity_data,
     branch_name,
     commit_hash,
+    file_path,
     occurred_at
   ) VALUES (
-    session_id,
+    existing_session_id,
     NEW.user_id,
     repo_record.project_id,
     NEW.repository_id,
@@ -93,16 +105,25 @@ BEGIN
     jsonb_build_object(
       'message', first_commit->>'message',
       'author', first_commit->'author',
-      'stats', first_commit->'stats'
+      'stats', first_commit->'stats',
+      'local_path', NEW.local_path,
+      'remote_url', repo_record.url,
+      'source_type', 'local'
     ),
     COALESCE(NEW.git_current_branch, first_commit->>'branch'),
     first_commit->>'sha',
+    NEW.local_path,
     COALESCE(
       (first_commit->>'date')::timestamptz,
       NOW()
     )
   )
-  ON CONFLICT DO NOTHING; -- Avoid duplicate entries
+  ON CONFLICT (session_id, file_path) DO UPDATE SET
+    activity_type = EXCLUDED.activity_type,
+    activity_data = EXCLUDED.activity_data,
+    branch_name = EXCLUDED.branch_name,
+    commit_hash = EXCLUDED.commit_hash,
+    occurred_at = EXCLUDED.occurred_at;
 
   -- Update team awareness
   INSERT INTO live_team_awareness (
@@ -138,6 +159,20 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+-- Add unique constraint for upsert on live_activities (session_id, file_path)
+-- This ensures one row per local folder per session
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'live_activities_session_file_path_unique'
+  ) THEN
+    ALTER TABLE live_activities
+    ADD CONSTRAINT live_activities_session_file_path_unique
+    UNIQUE (session_id, file_path);
+  END IF;
+END $$;
+
 -- Create trigger on repository_local_mappings
 DROP TRIGGER IF EXISTS trigger_live_activity_from_git_cache ON repository_local_mappings;
 
@@ -150,4 +185,4 @@ CREATE TRIGGER trigger_live_activity_from_git_cache
 
 -- Add comment
 COMMENT ON FUNCTION insert_live_activity_from_git_cache() IS
-'Automatically extracts the first commit from git_data_cache and inserts it as a live_activity when the cache is updated';
+'Automatically extracts the first commit from git_data_cache and inserts it as a live_activity when the cache is updated. One row per local folder per session.';
