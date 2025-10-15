@@ -27,7 +27,8 @@ export function setupNotificationIPC() {
       }
     } catch (error) {
       console.error('Error initializing notification service:', error)
-      return { success: false, error: error.message }
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      return { success: false, error: errorMessage }
     }
   })
 
@@ -43,7 +44,8 @@ export function setupNotificationIPC() {
       return { success: true }
     } catch (error) {
       console.error('Error stopping notification service:', error)
-      return { success: false, error: error.message }
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      return { success: false, error: errorMessage }
     }
   })
 
@@ -58,7 +60,8 @@ export function setupNotificationIPC() {
       return { success: true, preferences }
     } catch (error) {
       console.error('Error getting notification preferences:', error)
-      return { success: false, error: error.message }
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      return { success: false, error: errorMessage }
     }
   })
 
@@ -79,11 +82,12 @@ export function setupNotificationIPC() {
         // If app notifications were disabled, stop polling
         notificationService.stopPolling()
       }
-      
+
       return { success: true }
     } catch (error) {
       console.error('Error updating notification preferences:', error)
-      return { success: false, error: error.message }
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      return { success: false, error: errorMessage }
     }
   })
 
@@ -97,7 +101,8 @@ export function setupNotificationIPC() {
       return { success: true }
     } catch (error) {
       console.error('Error cleaning up notification service:', error)
-      return { success: false, error: error.message }
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      return { success: false, error: errorMessage }
     }
   })
 
