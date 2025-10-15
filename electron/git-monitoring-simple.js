@@ -220,7 +220,19 @@ class SimpleGitMonitoring {
     
     console.log('✅ Registered git:readCompleteHistory handler');
 
-    // Register git-monitoring:status handler for compatibility with useGitMonitoring hook
+    // Register git-monitoring:* handlers for compatibility with useGitMonitoring hook
+    ipcMain.handle('git-monitoring:start', async (event, config) => {
+      console.log('📡 Git IPC: Starting Git monitoring with config:', config);
+      // Already initialized, just return success
+      return { success: true };
+    });
+    
+    ipcMain.handle('git-monitoring:stop', async (event) => {
+      console.log('📡 Git IPC: Stopping Git monitoring');
+      // Don't actually stop in dev mode, just return success
+      return { success: true };
+    });
+    
     ipcMain.handle('git-monitoring:status', async (event) => {
       console.log('📡 Git IPC: Getting monitoring status');
       
@@ -232,7 +244,46 @@ class SimpleGitMonitoring {
       };
     });
     
-    console.log('✅ Registered git-monitoring:status handler');
+    ipcMain.handle('git-monitoring:toggle-project-watch', async (event, projectId, watching) => {
+      console.log(`📡 Git IPC: Toggle project watch for ${projectId}: ${watching}`);
+      
+      // Use the existing git:watchProject handler
+      if (watching) {
+        this.watchedProjects.add(projectId);
+      } else {
+        this.watchedProjects.delete(projectId);
+      }
+      
+      // Emit event to renderer
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('git:event', {
+          evt: watching ? 'watchingOn' : 'watchingOff',
+          projectId: projectId
+        });
+      }
+      
+      return { success: true };
+    });
+    
+    ipcMain.handle('git-monitoring:get-team-awareness', async (event, projectId) => {
+      console.log(`📡 Git IPC: Getting team awareness for project ${projectId}`);
+      // Return empty array for now - this would integrate with real-time collaboration
+      return { success: true, data: [] };
+    });
+    
+    ipcMain.handle('git-monitoring:get-recent-activities', async (event, projectId, limit) => {
+      console.log(`📡 Git IPC: Getting recent activities for project ${projectId}, limit: ${limit}`);
+      // Return empty array for now - this would show recent Git activities
+      return { success: true, data: [] };
+    });
+    
+    ipcMain.handle('git-monitoring:update-focus-file', async (event, sessionId, filePath) => {
+      console.log(`📡 Git IPC: Update focus file for session ${sessionId}: ${filePath}`);
+      // Just return success - this tracks what file user is working on
+      return { success: true };
+    });
+    
+    console.log('✅ Registered all git-monitoring:* handlers');
 
     // Send test activity events for watched projects
     setInterval(() => {
@@ -286,7 +337,13 @@ class SimpleGitMonitoring {
       'git:connectRepoToProject',
       'git:readDirectGitState',
       'git:readCompleteHistory',
-      'git-monitoring:status'
+      'git-monitoring:start',
+      'git-monitoring:stop',
+      'git-monitoring:status',
+      'git-monitoring:toggle-project-watch',
+      'git-monitoring:get-team-awareness',
+      'git-monitoring:get-recent-activities',
+      'git-monitoring:update-focus-file'
     ]);
     console.log('📋 Integration points:');
     console.log('  - Watches Supabase project_watches table changes');
@@ -493,7 +550,13 @@ class SimpleGitMonitoring {
     ipcMain.removeHandler('git:connectRepoToProject');
     ipcMain.removeHandler('git:readDirectGitState');
     ipcMain.removeHandler('git:readCompleteHistory');
+    ipcMain.removeHandler('git-monitoring:start');
+    ipcMain.removeHandler('git-monitoring:stop');
     ipcMain.removeHandler('git-monitoring:status');
+    ipcMain.removeHandler('git-monitoring:toggle-project-watch');
+    ipcMain.removeHandler('git-monitoring:get-team-awareness');
+    ipcMain.removeHandler('git-monitoring:get-recent-activities');
+    ipcMain.removeHandler('git-monitoring:update-focus-file');
     
     this.watchedProjects.clear();
     this.isInitialized = false;
