@@ -188,6 +188,7 @@ export function RepoVisualizationModal({ isOpen, onClose, project }: RepoVisuali
               {activeTab === 'remote' && (
                 <RemoteRepositoryView
                   branches={branches}
+                  commits={commits}
                   project={project}
                 />
               )}
