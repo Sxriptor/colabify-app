@@ -1,10 +1,10 @@
 {
-  "appId": "com.devpulse.app",
-  "productName": "DevPulse",
+  "appId": "com.colabify.app",
+  "productName": "Colabify",
   "protocols": [
     {
-      "name": "DevPulse",
-      "schemes": ["devpulse"]
+      "name": "Colabify",
+      "schemes": ["colabify", "devpulse"]
     }
   ],
   "directories": {

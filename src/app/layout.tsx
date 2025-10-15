@@ -15,8 +15,18 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "DevPulse - Clean GitHub Notifications",
+  title: "Colabify - Clean GitHub Notifications",
   description: "Stay informed about your GitHub repository activity with clean, project-scoped notifications.",
+  icons: {
+    icon: [
+      { url: '/icons/colabify.svg', type: 'image/svg+xml' },
+      { url: '/icons/icon-192x192.png', sizes: '192x192', type: 'image/png' },
+    ],
+    apple: [
+      { url: '/icons/icon-192x192.png', sizes: '192x192', type: 'image/png' },
+    ],
+  },
+  manifest: '/manifest.json',
 };
 
 export default function RootLayout({

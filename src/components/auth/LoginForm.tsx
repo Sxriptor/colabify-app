@@ -193,7 +193,7 @@ export function LoginForm() {
 
       <div className="text-center space-y-4">
         <p className="text-sm text-gray-600">
-          Sign in to DevPulse to get started with clean repository notifications.
+          Sign in to Colabify to get started with clean repository notifications.
         </p>
 
         <button

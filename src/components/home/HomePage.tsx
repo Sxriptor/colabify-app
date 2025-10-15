@@ -23,7 +23,7 @@ export function HomePage() {
       <div className="flex min-h-screen items-center justify-center bg-gray-50">
         <div className="text-center">
           <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-gray-800 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading DevPulse...</p>
+          <p className="mt-4 text-gray-600">Loading Colabify...</p>
         </div>
       </div>
     )
@@ -32,7 +32,7 @@ export function HomePage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-gray-50">
       <div className="text-center">
-        <h1 className="text-4xl font-bold text-gray-900 mb-4">DevPulse</h1>
+        <h1 className="text-4xl font-bold text-gray-900 mb-4">Colabify</h1>
         <p className="text-gray-600">Redirecting...</p>
       </div>
     </div>

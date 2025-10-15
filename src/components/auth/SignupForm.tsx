@@ -96,7 +96,7 @@ export function SignupForm() {
 
       <div className="text-center space-y-4">
         <p className="text-sm text-gray-600">
-          Create your DevPulse account using GitHub to get started with clean repository notifications and project management.
+          Create your Colabify account using GitHub to get started with clean repository notifications and project management.
         </p>
 
         <button
@@ -113,7 +113,7 @@ export function SignupForm() {
 
         <div className="text-xs text-gray-500 space-y-2">
           <p>
-            By signing up, you agree to let DevPulse access your GitHub repositories for notification purposes.
+            By signing up, you agree to let Colabify access your GitHub repositories for notification purposes.
           </p>
           <p>
             We only read repository activity and never modify your code.

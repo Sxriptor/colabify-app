@@ -241,7 +241,7 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                 </svg>
               </button>
-              <h1 className="text-xl font-semibold text-gray-900">DevPulse</h1>
+              <h1 className="text-xl font-semibold text-gray-900">Colabify</h1>
             </div>
             <div className="flex items-center space-x-4">
               <span className="text-sm text-gray-700">

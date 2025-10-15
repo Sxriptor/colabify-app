@@ -67,6 +67,7 @@ function createWindow() {
     height: 800,
     minWidth: 800,
     minHeight: 600,
+    icon: path.join(__dirname, '../public/icons/colabify.png'), // Colabify icon for taskbar
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -131,9 +132,9 @@ function createWindow() {
 ipcMain.handle('show-notification', async (event, { title, body, icon }) => {
   if (Notification.isSupported()) {
     const notification = new Notification({
-      title: title || 'DevPulse',
+      title: title || 'Colabify',
       body: body || '',
-      icon: icon ? path.join(__dirname, '../public', icon) : undefined
+      icon: icon ? path.join(__dirname, '../public', icon) : path.join(__dirname, '../public/icons/colabify.png')
     });
 
     notification.show();
