@@ -1,5 +1,14 @@
-const { app, BrowserWindow, Notification, ipcMain, shell, dialog } = require('electron');
 const path = require('path');
+
+// Load environment variables
+require('dotenv').config({ path: path.join(__dirname, '../.env.local') });
+
+// Debug: Check if Supabase credentials are loaded
+console.log('🔧 Environment check:');
+console.log('  SUPABASE_URL:', process.env.NEXT_PUBLIC_SUPABASE_URL ? '✅ Loaded' : '❌ Missing');
+console.log('  SUPABASE_KEY:', process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ? '✅ Loaded' : '❌ Missing');
+
+const { app, BrowserWindow, Notification, ipcMain, shell, dialog } = require('electron');
 const AuthManager = require('./services/AuthManager');
 const isDev = process.env.NODE_ENV === 'development';
 
@@ -357,10 +366,115 @@ ipcMain.handle('api:call', async (event, endpoint, options = {}) => {
   }
 });
 
+// Setup notification IPC handlers
+setupNotificationIPC();
+
 console.log('✅ All IPC handlers registered');
 
 // Initialize Git monitoring backend
 let gitMonitoringBackend;
+
+// Initialize notification system
+let notificationService;
+
+// Function to setup notification IPC handlers
+function setupNotificationIPC() {
+  console.log('🔔 Setting up Notification IPC handlers');
+
+  // Initialize notification service
+  ipcMain.handle('notifications:init', async (event, userId, accessToken) => {
+    try {
+      console.log('🔔 Initializing notification service for user:', userId);
+      
+      // Import the notification service
+      const { NotificationService } = require('./services/NotificationService');
+      
+      if (!notificationService) {
+        notificationService = new NotificationService();
+      }
+
+      // Start polling (this will check if user has app notifications enabled)
+      await notificationService.startPolling(userId, accessToken);
+      return { success: true, message: 'Notification service started' };
+    } catch (error) {
+      console.error('Error initializing notification service:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  // Stop notification service
+  ipcMain.handle('notifications:stop', async () => {
+    try {
+      console.log('🔔 Stopping notification service');
+      
+      if (notificationService) {
+        notificationService.stopPolling();
+      }
+      
+      return { success: true };
+    } catch (error) {
+      console.error('Error stopping notification service:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  // Get user notification preferences
+  ipcMain.handle('notifications:getPreferences', async (event, userId) => {
+    try {
+      if (!notificationService) {
+        const { NotificationService } = require('./services/NotificationService');
+        notificationService = new NotificationService();
+      }
+
+      const preferences = await notificationService.getUserNotificationPreferences(userId);
+      return { success: true, preferences };
+    } catch (error) {
+      console.error('Error getting notification preferences:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  // Update notification service when preferences change
+  ipcMain.handle('notifications:updatePreferences', async (event, userId, preferences) => {
+    try {
+      console.log('🔔 Updating notification preferences for user:', userId);
+      
+      if (!notificationService) {
+        const { NotificationService } = require('./services/NotificationService');
+        notificationService = new NotificationService();
+      }
+
+      // If app notifications were enabled, start polling
+      if (preferences.app === true) {
+        notificationService.startPolling(userId);
+      } else {
+        // If app notifications were disabled, stop polling
+        notificationService.stopPolling();
+      }
+      
+      return { success: true };
+    } catch (error) {
+      console.error('Error updating notification preferences:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  // Cleanup on app quit
+  ipcMain.handle('notifications:cleanup', async () => {
+    try {
+      if (notificationService) {
+        notificationService.destroy();
+        notificationService = null;
+      }
+      return { success: true };
+    } catch (error) {
+      console.error('Error cleaning up notification service:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  console.log('✅ Notification IPC handlers setup complete');
+}
 
 // Function to initialize Git monitoring (called after window is ready)
 async function initializeGitMonitoring(mainWindow) {
@@ -476,16 +590,38 @@ app.on('window-all-closed', () => {
   }
 });
 
-// Cleanup Git monitoring backend on app quit
+// Cleanup Git monitoring backend and notification service on app quit
 app.on('before-quit', async (event) => {
+  let needsCleanup = false;
+  
   if (gitMonitoringBackend && gitMonitoringBackend.isInitialized()) {
+    needsCleanup = true;
+  }
+  
+  if (notificationService) {
+    needsCleanup = true;
+  }
+  
+  if (needsCleanup) {
     event.preventDefault();
     
     try {
-      await gitMonitoringBackend.cleanup();
+      // Cleanup notification service
+      if (notificationService) {
+        console.log('🔔 Cleaning up notification service...');
+        notificationService.destroy();
+        notificationService = null;
+      }
+      
+      // Cleanup Git monitoring
+      if (gitMonitoringBackend && gitMonitoringBackend.isInitialized()) {
+        console.log('🧹 Cleaning up Git monitoring backend...');
+        await gitMonitoringBackend.cleanup();
+      }
+      
       app.quit();
     } catch (error) {
-      console.error('❌ Error during Git monitoring cleanup:', error);
+      console.error('❌ Error during cleanup:', error);
       app.quit();
     }
   }
