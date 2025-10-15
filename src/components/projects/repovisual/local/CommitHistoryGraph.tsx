@@ -45,8 +45,11 @@ export function CommitHistoryGraph({ commits, branches = [] }: CommitHistoryGrap
     const innerWidth = width - margin.left - margin.right
     const innerHeight = height - margin.top - margin.bottom
 
+    // Filter out any undefined/null commits before processing
+    const validCommits = commits.filter(commit => commit && commit.sha)
+
     // Create commit nodes with activity data
-    const nodes: CommitNode[] = commits.map((commit, index) => ({
+    const nodes: CommitNode[] = validCommits.map((commit, index) => ({
       id: commit.sha,
       sha: commit.sha,
       message: commit.commit.message.split('\n')[0],
@@ -67,10 +70,10 @@ export function CommitHistoryGraph({ commits, branches = [] }: CommitHistoryGrap
     const nodeMap = new Map(nodes.map(n => [n.sha, n]))
 
     // Build parent-child relationships
-    commits.forEach((commit, index) => {
-      if (index < commits.length - 1) {
+    validCommits.forEach((commit, index) => {
+      if (index < validCommits.length - 1) {
         const source = nodeMap.get(commit.sha)
-        const target = nodeMap.get(commits[index + 1].sha)
+        const target = nodeMap.get(validCommits[index + 1].sha)
         if (source && target) {
           links.push({ source, target })
           source.parents.push(target.sha)

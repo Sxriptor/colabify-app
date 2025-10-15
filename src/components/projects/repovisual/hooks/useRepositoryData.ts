@@ -16,47 +16,80 @@ export function useRepositoryData(isOpen: boolean, project: any, activeTab?: str
   const [lastDataHash, setLastDataHash] = useState<string>('')
   const [isBackgroundCheck, setIsBackgroundCheck] = useState(false)
   const [lastCheckTime, setLastCheckTime] = useState<number>(0)
+  const [showingCachedData, setShowingCachedData] = useState(false)
+  const [isFetching, setIsFetching] = useState(false) // Prevent duplicate fetches
 
   useEffect(() => {
-    if (isOpen && project?.repositories?.length > 0) {
-      // Only check GitHub connection if we're on the remote tab
-      if (activeTab === 'remote') {
-        checkGitHubConnection()
+    if (!isOpen || !project?.repositories?.length) return
+
+    console.log('🎬 Modal opened - starting cache-first load sequence')
+    
+    // STEP 1: Load from database cache (repository_local_mappings.git_data_cache) IMMEDIATELY
+    const hasCache = loadFromDatabaseCache()
+    
+    // STEP 2: Check GitHub connection if needed
+    if (activeTab === 'remote') {
+      checkGitHubConnection()
+    }
+    
+    // STEP 3: Handle Git data fetching based on cache status
+    let gitFetchTimeout: NodeJS.Timeout
+    
+    if (hasCache) {
+      // We have cache - show it, then refresh in background
+      console.log('⏱️ Cache displayed - scheduling background refresh in 1 second...')
+      gitFetchTimeout = setTimeout(() => {
+        console.log('🔄 Starting background Git refresh (1 scan per repo)')
+        fetchRepositoryData(true, true) // backgroundCheck=true, backgroundFetch=true
+      }, 1000) // 1 second delay to clearly show cached data first
+    } else {
+      // No cache - this is first time, need to populate cache
+      console.log('📦 No cache found - first time scan needed to populate cache')
+      console.log('💡 Future opens will be instant using cached data!')
+      setLoading(true)
+      setError(null) // Clear any errors
+      
+      // Trigger cache population immediately (NOT background, so user sees progress)
+      fetchRepositoryData(false, false)
+    }
+
+    // Set up real-time Git event listener
+    if (typeof window !== 'undefined' && (window as any).electronAPI) {
+      const electronAPI = (window as any).electronAPI
+
+      const handleGitEvent = (event: any) => {
+        // Filter out test events
+        const testEventTypes = ['COMMIT', 'PUSH', 'REMOTE_UPDATE', 'BRANCH_SWITCH']
+        if (event.details?.isTest || 
+            event.type?.includes('test') || 
+            event.type?.includes('TEST') ||
+            (testEventTypes.includes(event.type) && event.details?.source === 'test')) {
+          return
+        }
+        
+        if (event.projectId === project.id) {
+          console.log('📡 Git event detected - will refresh in background')
+          checkForDataChanges()
+        }
       }
-      fetchRepositoryData()
 
-      // Set up real-time Git event listener
-      if (typeof window !== 'undefined' && (window as any).electronAPI) {
-        const electronAPI = (window as any).electronAPI
+      if (electronAPI.git) {
+        electronAPI.git.onEvent(handleGitEvent)
+      }
 
-        const handleGitEvent = (event: any) => {
-          console.log('📡 Received Git event in visualization:', event)
-
-          if (event.projectId === project.id) {
-            // Filter out test events that don't represent real changes
-            const testEventTypes = ['COMMIT', 'PUSH', 'REMOTE_UPDATE', 'BRANCH_SWITCH']
-            if (event.details?.isTest || 
-                event.type?.includes('test') || 
-                event.type?.includes('TEST') ||
-                (testEventTypes.includes(event.type) && event.details?.source === 'test')) {
-              console.log(`🧪 Ignoring test event (${event.type}) - no real changes occurred`)
-              return
-            }
-            
-            // Do a background check without showing loading state
-            checkForDataChanges()
-          }
-        }
-
+      return () => {
         if (electronAPI.git) {
-          electronAPI.git.onEvent(handleGitEvent)
+          electronAPI.git.removeEventListeners()
         }
+        if (gitFetchTimeout) {
+          clearTimeout(gitFetchTimeout)
+        }
+      }
+    }
 
-        return () => {
-          if (electronAPI.git) {
-            electronAPI.git.removeEventListeners()
-          }
-        }
+    return () => {
+      if (gitFetchTimeout) {
+        clearTimeout(gitFetchTimeout)
       }
     }
   }, [isOpen, project, activeTab])
@@ -106,6 +139,100 @@ export function useRepositoryData(isOpen: boolean, project: any, activeTab?: str
     } catch (error) {
       console.warn('Error creating data hash:', error)
       return Date.now().toString()
+    }
+  }
+
+  /**
+   * Load from database cache (repository_local_mappings.git_data_cache) IMMEDIATELY
+   * This provides instant display without running Git commands
+   * @returns true if cache was found and displayed
+   */
+  const loadFromDatabaseCache = (): boolean => {
+    if (!project?.repositories?.length) {
+      setLoading(true)
+      return false
+    }
+    
+    console.log('⚡ CACHE LOAD: Reading from repository_local_mappings.git_data_cache...')
+    
+    const localMappings = project.repositories[0]?.local_mappings || []
+    
+    if (localMappings.length === 0) {
+      console.log('📦 CACHE LOAD: No local mappings found')
+      setLoading(true)
+      return false
+    }
+    
+    console.log(`📂 CACHE LOAD: Found ${localMappings.length} local mappings`)
+    
+    const allBranches: any[] = []
+    const allCommits: any[] = []
+    const allUsers: any[] = []
+    let cacheFound = false
+    
+    // Build data from cached git_data_cache in each mapping
+    for (const mapping of localMappings) {
+      const cachedData = mapping.git_data_cache
+      
+      if (cachedData && cachedData.commits && cachedData.commits.length > 0) {
+        cacheFound = true
+        console.log(`💾 CACHE LOAD: Found ${cachedData.commits.length} commits for ${mapping.local_path.split(/[/\\]/).pop()}`)
+        
+        // Add branch info from cache
+        allBranches.push({
+          name: cachedData.repoPath?.split('/').pop() || mapping.local_path.split(/[/\\]/).pop() || 'Unknown',
+          path: mapping.local_path,
+          branch: cachedData.currentBranch || cachedData.commits[0]?.branches?.[0] || 'main',
+          head: cachedData.commits[0]?.sha || 'cached',
+          dirty: false,
+          ahead: 0,
+          behind: 0,
+          localBranches: cachedData.branches?.filter((b: any) => b.isLocal).map((b: any) => b.name) || ['main'],
+          remoteBranches: cachedData.branches?.filter((b: any) => b.isRemote).map((b: any) => b.name) || [],
+          remoteUrls: cachedData.remotes || {},
+          lastChecked: cachedData.cachedAt || mapping.git_data_last_updated,
+          user: mapping.user,
+          id: `cached-${mapping.id}`,
+          history: cachedData,
+          fromCache: true
+        })
+        
+        // Add commits from cache
+        if (cachedData.commits) {
+          allCommits.push(...cachedData.commits)
+        }
+        
+        // Add contributors from cache as users
+        if (cachedData.contributors) {
+          for (const contributor of cachedData.contributors) {
+            allUsers.push({
+              userId: contributor.email || contributor.name,
+              userName: contributor.name,
+              userEmail: contributor.email,
+              localPath: mapping.local_path,
+              currentBranch: cachedData.currentBranch || 'main',
+              status: 'cached',
+              commitsToday: 0
+            })
+          }
+        }
+      }
+    }
+    
+    if (cacheFound && allBranches.length > 0) {
+      console.log(`✅ CACHE LOAD: Displaying ${allBranches.length} repos, ${allCommits.length} commits INSTANTLY`)
+      setBranches(allBranches)
+      setCommits(allCommits)
+      setLocalUsers(allUsers)
+      setDataSource('cached')
+      setShowingCachedData(true)
+      setError(null)
+      setLoading(false)
+      return true
+    } else {
+      console.log('📦 CACHE LOAD: No cached data found - will load fresh')
+      setLoading(true)
+      return false
     }
   }
 
@@ -186,14 +313,33 @@ export function useRepositoryData(isOpen: boolean, project: any, activeTab?: str
     console.log('🔍 Checking for data changes in background...')
     setLastCheckTime(now)
     setIsBackgroundCheck(true)
-    await fetchRepositoryData(true) // Pass true for background check
+    await fetchRepositoryData(true, true) // backgroundCheck=true, backgroundFetch=true
     setIsBackgroundCheck(false)
   }
 
-  const fetchRepositoryData = async (backgroundCheck = false) => {
-    if (!backgroundCheck) {
+  /**
+   * Fetch repository data - with intelligent caching and fallback to local_mappings
+   * @param backgroundCheck - If true, only updates UI if data changed
+   * @param backgroundFetch - If true, runs silently after showing cached data
+   */
+  const fetchRepositoryData = async (backgroundCheck = false, backgroundFetch = false) => {
+    // Prevent duplicate fetches
+    if (isFetching) {
+      console.log('⚠️ GIT FETCH: Already fetching - skipping duplicate request')
+      return
+    }
+    
+    setIsFetching(true)
+    
+    // Only show loading state if it's a fresh fetch (not background or cached)
+    const shouldShowLoading = !backgroundCheck && !backgroundFetch && !showingCachedData
+    
+    if (shouldShowLoading) {
+      console.log('⏳ GIT FETCH: Showing loading state for fresh fetch')
       setLoading(true)
       setError(null)
+    } else if (backgroundFetch) {
+      console.log('🔄 GIT FETCH: Starting background refresh (silent)')
     }
 
     try {
@@ -208,7 +354,12 @@ export function useRepositoryData(isOpen: boolean, project: any, activeTab?: str
 
       const electronAPI = (window as any).electronAPI
       const localMappings = project.repositories?.[0]?.local_mappings || []
-      console.log('📂 Using stored local repository mappings:', localMappings)
+      
+      if (backgroundFetch) {
+        console.log('🔄 Background fetch: Processing stored local repository mappings')
+      } else {
+        console.log('📂 Using stored local repository mappings:', localMappings)
+      }
 
       if (localMappings.length === 0) {
         console.log('⚠️ No local repository mappings found, using mock data')
@@ -421,16 +572,21 @@ export function useRepositoryData(isOpen: boolean, project: any, activeTab?: str
           if (!backgroundCheck) {
             console.log('📊 All branches data:', allBranches)
           }
+          
+          // Update state
           setBranches(allBranches)
           setCommits(finalCommits)
           setLocalUsers(realUsers)
           setDataSource('backend')
           setLastDataHash(newDataHash)
+          setShowingCachedData(false)
           
           console.log(`✅ Using real Git data from ${allBranches.length} stored repositories`)
           if (finalCommits.length > 0) {
             console.log(`✅ Using ${finalCommits.length} commits from ${allCommits.length > 0 ? 'complete Git history' : 'generated data'}`)
           }
+          
+          // Note: Data is already cached in repository_local_mappings.git_data_cache by updateGitDataCache()
         } else if (backgroundCheck) {
           console.log('✅ No data changes detected - skipping UI update')
         }
@@ -524,16 +680,24 @@ export function useRepositoryData(isOpen: boolean, project: any, activeTab?: str
 
     } catch (err) {
       console.error('Error fetching repository data:', err)
-      setError(err instanceof Error ? err.message : 'Failed to fetch repository data')
-
-      await dataFetchers.fetchMockBranches(setBranches)
-      await dataFetchers.fetchMockCommits(setCommits)
-      await dataFetchers.fetchMockUsers(setLocalUsers)
-      setDataSource('mock')
-    } finally {
-      if (!backgroundCheck) {
-        setLoading(false)
+      
+      // Only set error if not a background fetch (to avoid disrupting cached data display)
+      if (!backgroundFetch) {
+        setError(err instanceof Error ? err.message : 'Failed to fetch repository data')
+        await dataFetchers.fetchMockBranches(setBranches)
+        await dataFetchers.fetchMockCommits(setCommits)
+        await dataFetchers.fetchMockUsers(setLocalUsers)
+        setDataSource('mock')
+      } else {
+        console.log('🔄 Background fetch error - keeping cached data displayed')
       }
+    } finally {
+      // Only hide loading state if we showed it
+      if (!backgroundCheck && !backgroundFetch) {
+        setLoading(false)
+        console.log('✅ GIT FETCH: Loading complete')
+      }
+      setIsFetching(false) // Allow next fetch
     }
   }
 
@@ -579,6 +743,8 @@ export function useRepositoryData(isOpen: boolean, project: any, activeTab?: str
     dataSource,
     githubConnected,
     githubDataSource,
+    showingCachedData, // Indicates if showing cached data
+    isBackgroundRefreshing: isFetching && showingCachedData, // Background refresh in progress
     fetchRepositoryData
   }
 }
