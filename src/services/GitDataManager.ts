@@ -420,7 +420,7 @@ class GitDataManagerService {
 
             allUncommittedChanges.push(...uncommittedChanges)
 
-            // Sync file changes to database if there are uncommitted changes
+            // Sync file changes to dataase if there are uncommitted changes
             if (uncommittedChanges.length > 0 && gitState.fileChanges) {
               try {
                 await this.syncFileChangesToDatabase(
