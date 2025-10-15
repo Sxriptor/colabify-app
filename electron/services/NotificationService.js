@@ -8,6 +8,7 @@ class NotificationService {
     this.pollingInterval = null;
     this.isPolling = false;
     this.lastCheckedAt = new Date();
+    this.accessToken = null;
     
     this.initializeSupabase();
   }
@@ -46,26 +47,35 @@ class NotificationService {
     this.currentUserId = userId;
     this.lastCheckedAt = new Date();
 
-    // Set auth token if provided
-    if (accessToken && this.supabase) {
+    // Store the access token and create authenticated client
+    if (accessToken) {
+      this.accessToken = accessToken;
+      console.log('✅ Access token stored for notification service');
+      
+      // Create a new Supabase client with the access token
       try {
-        await this.supabase.auth.setSession({
-          access_token: accessToken,
-          refresh_token: '', // We don't need refresh for polling
-          user: { id: userId }
+        const { createClient } = require('@supabase/supabase-js');
+        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+        const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+        
+        this.supabase = createClient(supabaseUrl, supabaseKey, {
+          global: {
+            headers: {
+              Authorization: `Bearer ${accessToken}`
+            }
+          }
         });
-        console.log('✅ Auth session set for notification service');
+        console.log('✅ Authenticated Supabase client created');
       } catch (error) {
-        console.error('❌ Failed to set auth session:', error);
+        console.error('❌ Failed to create authenticated client:', error);
       }
+    } else {
+      console.warn('⚠️ No access token provided for notification service');
     }
 
-    // Check if user has app notifications enabled
-    const hasAppNotifications = await this.hasAppNotificationsEnabled(userId);
-    if (!hasAppNotifications) {
-      console.log('📵 App notifications disabled for user, not starting polling');
-      return;
-    }
+    // For now, always start polling - we'll check preferences during polling
+    // TODO: Re-enable preference check once user records are properly migrated
+    console.log('🔔 Starting polling (preference check temporarily disabled for testing)');
 
     // Stop existing polling
     this.stopPolling();
@@ -105,17 +115,23 @@ class NotificationService {
 
     try {
       console.log('🔍 Checking for new notifications for user:', this.currentUserId);
+      
+      // Check if we have access token
+      if (!this.accessToken) {
+        console.error('❌ No access token available for notification service');
+        return;
+      }
 
-      // Get pending app notifications for the current user
+      // Get pending app notifications for the current user (only recent ones - last 30 seconds)
+      const thirtySecondsAgo = new Date(Date.now() - 30 * 1000).toISOString();
+      
       const { data: pendingLogs, error: logsError } = await this.supabase
         .from('notifications_log')
-        .select(`
-          *,
-          notification:notifications(*)
-        `)
+        .select('*')
         .eq('user_id', this.currentUserId)
         .eq('delivery_method', 'app')
         .eq('delivery_status', 'pending')
+        .gte('created_at', thirtySecondsAgo)
         .order('created_at', { ascending: false });
 
       if (logsError) {
@@ -123,27 +139,62 @@ class NotificationService {
         return;
       }
 
-      console.log('📊 Query result:', {
-        pendingLogs: pendingLogs?.length || 0,
-        data: pendingLogs
-      });
-
       if (!pendingLogs || pendingLogs.length === 0) {
-        console.log('📭 No pending notifications found');
+        console.log('📭 No pending notification logs found');
         return;
       }
 
-      console.log(`📬 Found ${pendingLogs.length} pending notifications, processing...`);
+      console.log(`📋 Found ${pendingLogs.length} pending logs, fetching notifications...`);
 
-      // Process each pending notification
+      // Now get the actual notifications for each log
+      const notificationIds = pendingLogs.map(log => log.notification_id);
+      console.log('🔍 Looking for these notification IDs:', notificationIds);
+      
+      // Let's also check what's actually in the notifications table
+      const { data: allNotifications, error: allError } = await this.supabase
+        .from('notifications')
+        .select('id, title, user_id')
+        .eq('user_id', this.currentUserId);
+        
+      console.log('📋 All notifications for user:', allNotifications);
+      if (allError) {
+        console.error('❌ Error fetching all notifications:', allError);
+      }
+      
+      const { data: notifications, error: notificationsError } = await this.supabase
+        .from('notifications')
+        .select('*')
+        .in('id', notificationIds);
+
+      if (notificationsError) {
+        console.error('❌ Error fetching notifications:', notificationsError);
+        return;
+      }
+
+      console.log(`📬 Found ${notifications?.length || 0} notifications for ${pendingLogs.length} logs`);
+      
+      // Debug: Log the notification IDs we're looking for vs what we found
+      console.log('🔍 Debug info:');
+      console.log('  Looking for notification IDs:', notificationIds);
+      console.log('  Found notifications:', notifications?.map(n => ({ id: n.id, title: n.title })) || []);
+
+      // Match notifications to logs and process them
       for (const log of pendingLogs) {
-        console.log('📋 Processing log:', log.id, 'with notification:', log.notification?.title);
-        if (log.notification) {
-          await this.showSystemNotification(log.notification, log.id);
+        const notification = notifications?.find(n => n.id === log.notification_id);
+        if (notification) {
+          console.log('📋 Processing notification:', notification.title);
+          await this.showSystemNotification(notification, log.id);
         } else {
-          console.warn('⚠️ Log has no notification data:', log);
+          console.warn('⚠️ No notification found for log:', log.notification_id);
         }
       }
+
+      if (logsError) {
+        console.error('❌ Error fetching notification logs:', logsError);
+        return;
+      }
+
+
 
     } catch (error) {
       console.error('❌ Error checking for notifications:', error);
@@ -276,25 +327,44 @@ class NotificationService {
         .single();
 
       if (error) {
-        console.error('Error fetching user notification preferences:', error);
-        return null;
+        console.log('ℹ️ User notification preferences not found (this is normal for new users):', error.message);
+        // Return default preferences if user record doesn't exist or doesn't have preferences
+        return {
+          notifications: true,
+          email: true,
+          app: true
+        };
       }
 
-      return data?.notification_preferences || {
+      const preferences = data?.notification_preferences || {
         notifications: true,
         email: true,
         app: true
       };
+
+      console.log('📋 User notification preferences:', preferences);
+      return preferences;
     } catch (error) {
       console.error('Error getting notification preferences:', error);
-      return null;
+      // Return default preferences on error
+      return {
+        notifications: true,
+        email: true,
+        app: true
+      };
     }
   }
 
   // Check if user has app notifications enabled
   async hasAppNotificationsEnabled(userId) {
     const preferences = await this.getUserNotificationPreferences(userId);
-    return preferences?.app === true;
+    const hasAppNotifications = preferences?.app === true;
+    console.log('🔔 App notifications enabled check:', {
+      userId,
+      preferences,
+      hasAppNotifications
+    });
+    return hasAppNotifications;
   }
 
   // Cleanup method

@@ -20,6 +20,12 @@ export function useElectronNotifications() {
         const supabase = await createElectronClient()
         const { data: { session } } = await supabase.auth.getSession()
         
+        console.log('🔍 Session check:', {
+          hasSession: !!session,
+          hasAccessToken: !!session?.access_token,
+          userId: user.id
+        })
+        
         const result = await (window as any).electronAPI.invoke('notifications:init', user.id, session?.access_token)
         
         if (result.success) {

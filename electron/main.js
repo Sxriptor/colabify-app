@@ -386,6 +386,19 @@ function setupNotificationIPC() {
     try {
       console.log('🔔 Initializing notification service for user:', userId);
       
+      // Get the access token from AuthManager if not provided
+      let token = accessToken;
+      if (!token) {
+        console.log('🔍 No token provided, getting from AuthManager...');
+        try {
+          const stored = await authManager.getStoredToken();
+          token = stored?.token;
+          console.log('🔍 Token from AuthManager:', !!token, token ? 'Length: ' + token.length : 'No token');
+        } catch (authError) {
+          console.error('❌ Failed to get token from AuthManager:', authError);
+        }
+      }
+      
       // Import the notification service
       const { NotificationService } = require('./services/NotificationService');
       
@@ -394,7 +407,7 @@ function setupNotificationIPC() {
       }
 
       // Start polling (this will check if user has app notifications enabled)
-      await notificationService.startPolling(userId, accessToken);
+      await notificationService.startPolling(userId, token);
       return { success: true, message: 'Notification service started' };
     } catch (error) {
       console.error('Error initializing notification service:', error);
