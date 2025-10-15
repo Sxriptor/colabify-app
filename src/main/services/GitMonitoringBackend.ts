@@ -7,6 +7,7 @@ import { GitWatcher } from './GitWatcher'
 import { LiveActivityMonitor } from './LiveActivityMonitor'
 import { DatabaseSync } from './DatabaseSync'
 import { RepoStore } from '../store/RepoStore'
+import { GitState } from './GitState'
 
 export interface GitMonitoringConfig {
   userId: string

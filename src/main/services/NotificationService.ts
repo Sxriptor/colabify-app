@@ -179,7 +179,8 @@ export class NotificationService {
 
     } catch (error) {
       console.error('Error showing system notification:', error)
-      await this.markAsDelivered(logId, error.message)
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      await this.markAsDelivered(logId, errorMessage)
     }
   }
 
