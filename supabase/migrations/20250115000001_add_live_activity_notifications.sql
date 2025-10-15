@@ -32,6 +32,7 @@ BEGIN
     WHERE pm.project_id = NEW.project_id
       AND u.id != NEW.user_id  -- Don't notify the person who made the commit
   LOOP
+    RAISE LOG 'Found team member: %, preferences: %', team_member.id, team_member.notification_preferences;
     -- Check if user has notifications enabled
     IF team_member.notification_preferences IS NULL OR
        (team_member.notification_preferences->>'notifications')::boolean = true THEN
@@ -66,6 +67,8 @@ BEGIN
         NOW()
       )
       RETURNING id INTO notification_id;
+
+      RAISE LOG 'Created notification: % for user: %', notification_id, team_member.id;
 
       -- Create notification log entries based on preferences
       -- App notification (if enabled or if preference is null, default to true)
@@ -109,6 +112,11 @@ BEGIN
   END LOOP;
 
   RETURN NEW;
+EXCEPTION
+  WHEN OTHERS THEN
+    -- Log the error but don't fail the transaction
+    RAISE WARNING 'notify_team_on_live_activity error: %, SQLSTATE: %', SQLERRM, SQLSTATE;
+    RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
 
@@ -124,3 +132,16 @@ CREATE TRIGGER trigger_notify_team_on_live_activity
 -- Add comment
 COMMENT ON FUNCTION notify_team_on_live_activity() IS
 'Creates notifications for team members when live_activities are updated. Respects user notification preferences for app and email.';
+
+-- Verify trigger was created
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_trigger
+    WHERE tgname = 'trigger_notify_team_on_live_activity'
+  ) THEN
+    RAISE NOTICE 'Trigger trigger_notify_team_on_live_activity created successfully';
+  ELSE
+    RAISE WARNING 'Trigger trigger_notify_team_on_live_activity was NOT created';
+  END IF;
+END $$;
