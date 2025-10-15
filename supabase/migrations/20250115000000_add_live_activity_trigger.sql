@@ -38,6 +38,7 @@ BEGIN
   END IF;
 
   -- Get or create ONE session per project (not per local mapping)
+  -- First try to get existing session
   SELECT id INTO existing_session_id
   FROM live_activity_sessions
   WHERE project_id = repo_record.project_id
@@ -45,7 +46,7 @@ BEGIN
   LIMIT 1;
 
   IF existing_session_id IS NULL THEN
-    -- Create new session for this project
+    -- Create new session for this project using ON CONFLICT to handle race conditions
     existing_session_id := gen_random_uuid();
 
     INSERT INTO live_activity_sessions (
@@ -74,12 +75,23 @@ BEGIN
       first_commit->>'sha',
       0,
       0
-    );
+    )
+    ON CONFLICT (project_id, user_id) DO UPDATE SET
+      last_activity = NOW(),
+      repository_id = EXCLUDED.repository_id,
+      local_path = EXCLUDED.local_path,
+      current_branch = EXCLUDED.current_branch,
+      current_head = EXCLUDED.current_head
+    RETURNING id INTO existing_session_id;
   ELSE
     -- Update existing session
     UPDATE live_activity_sessions
     SET
-      last_activity = NOW()
+      last_activity = NOW(),
+      repository_id = NEW.repository_id,
+      local_path = NEW.local_path,
+      current_branch = NEW.git_current_branch,
+      current_head = first_commit->>'sha'
     WHERE id = existing_session_id;
   END IF;
 
@@ -158,6 +170,37 @@ BEGIN
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
+
+-- Clean up any existing duplicate sessions FIRST (keep the most recent one per project/user)
+DO $$
+BEGIN
+  -- Delete older duplicate sessions, keeping only the most recent one per project/user
+  DELETE FROM live_activity_sessions
+  WHERE id IN (
+    SELECT id
+    FROM (
+      SELECT id,
+             ROW_NUMBER() OVER (PARTITION BY project_id, user_id ORDER BY last_activity DESC) as rn
+      FROM live_activity_sessions
+    ) t
+    WHERE t.rn > 1
+  );
+
+  RAISE NOTICE 'Cleaned up duplicate activity sessions';
+END $$;
+
+-- Now add unique constraint on live_activity_sessions to ensure one session per project per user
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'live_activity_sessions_project_user_unique'
+  ) THEN
+    ALTER TABLE live_activity_sessions
+    ADD CONSTRAINT live_activity_sessions_project_user_unique
+    UNIQUE (project_id, user_id);
+  END IF;
+END $$;
 
 -- Add unique constraint for upsert on live_activities (session_id, file_path)
 -- This ensures one row per local folder per session
