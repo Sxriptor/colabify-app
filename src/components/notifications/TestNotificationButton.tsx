@@ -18,17 +18,57 @@ export function TestNotificationButton() {
       const { createElectronClient } = await import('@/lib/supabase/electron-client')
       const supabase = await createElectronClient()
 
-      // Use the create_notification function we created in the migration
+      // Create a realistic Git activity notification
+      const gitActions = [
+        { action: 'pushed', branch: 'main', commits: 3 },
+        { action: 'merged', branch: 'feature/auth-system', commits: 5 },
+        { action: 'committed', branch: 'develop', commits: 1 },
+        { action: 'created branch', branch: 'hotfix/critical-bug', commits: 0 },
+        { action: 'pushed', branch: 'feature/notifications', commits: 2 }
+      ]
+      
+      const contributors = ['Sxriptor', 'DevMaster', 'CodeNinja', 'GitGuru']
+      const repositories = ['electron-colabify', 'web-dashboard', 'api-server', 'mobile-app']
+      
+      const randomAction = gitActions[Math.floor(Math.random() * gitActions.length)]
+      const randomContributor = contributors[Math.floor(Math.random() * contributors.length)]
+      const randomRepo = repositories[Math.floor(Math.random() * repositories.length)]
+      const commitHash = Math.random().toString(36).substring(2, 9)
+      
+      let title, message;
+      
+      if (randomAction.action === 'pushed') {
+        title = `${randomContributor} pushed to ${randomAction.branch}`
+        message = `${randomAction.commits} new commit${randomAction.commits > 1 ? 's' : ''} in ${randomRepo} • Latest: ${commitHash}`
+      } else if (randomAction.action === 'merged') {
+        title = `${randomContributor} merged ${randomAction.branch}`
+        message = `${randomAction.commits} commits merged into main in ${randomRepo} • ${commitHash}`
+      } else if (randomAction.action === 'committed') {
+        title = `${randomContributor} committed to ${randomAction.branch}`
+        message = `New commit in ${randomRepo} • ${commitHash}`
+      } else if (randomAction.action === 'created branch') {
+        title = `${randomContributor} created ${randomAction.branch}`
+        message = `New branch in ${randomRepo} • Ready for development`
+      }
+
       const { data, error } = await supabase.rpc('create_notification', {
         p_user_id: user.id,
-        p_title: 'Test Notification',
-        p_message: `This is a test notification created at ${new Date().toLocaleTimeString()}`,
-        p_type: 'info'
+        p_title: title,
+        p_message: message,
+        p_type: 'info',
+        p_data: {
+          contributor: randomContributor,
+          action: randomAction.action,
+          branch: randomAction.branch,
+          repository: randomRepo,
+          commitHash: commitHash,
+          commitCount: randomAction.commits
+        }
       })
 
       if (error) throw error
 
-      setMessage('✅ Test notification created! Check your system notifications and inbox.')
+      setMessage('✅ Git activity notification sent! Check your system notifications and inbox.')
       
       // Clear message after 3 seconds
       setTimeout(() => setMessage(''), 3000)
@@ -58,7 +98,7 @@ export function TestNotificationButton() {
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
             </svg>
-            Test Notification
+            Simulate Git Activity
           </>
         )}
       </button>

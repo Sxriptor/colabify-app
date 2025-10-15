@@ -275,13 +275,17 @@ class NotificationService {
         return;
       }
 
-      // Create the system notification
+      // Create the system notification with enhanced formatting
+      const icon = this.getIconForType(notification.type);
+      
       const systemNotification = new Notification({
         title: notification.title,
         body: notification.message,
-        icon: this.getIconForType(notification.type),
+        icon: icon,
         silent: false,
-        urgency: this.getUrgencyForType(notification.type)
+        urgency: this.getUrgencyForType(notification.type),
+        tag: 'colabify-git-activity', // Group similar notifications
+        timeoutType: 'default'
       });
 
       // Handle notification click
@@ -347,19 +351,29 @@ class NotificationService {
 
   // Get icon path for notification type
   getIconForType(type) {
-    // You can customize these paths based on your app's icon structure
-    const iconPath = app.getAppPath();
+    const path = require('path');
+    const fs = require('fs');
     
-    switch (type) {
-      case 'success':
-        return `${iconPath}/build/icon.icns`;
-      case 'warning':
-        return `${iconPath}/build/icon.icns`;
-      case 'error':
-        return `${iconPath}/build/icon.icns`;
-      default:
-        return `${iconPath}/build/icon.icns`;
+    // Try different icon paths in order of preference
+    const iconPaths = [
+      path.join(__dirname, '../../build/icon.icns'),           // Production build
+      path.join(__dirname, '../../build/icon.png'),            // Production PNG fallback
+      path.join(__dirname, '../../public/icons/icon.icns'),    // Development ICNS
+      path.join(__dirname, '../../public/icons/icon-512x512.png'), // Development PNG
+      path.join(__dirname, '../../public/icons/colabify.png')  // Fallback PNG
+    ];
+    
+    // Find the first icon that exists
+    for (const iconPath of iconPaths) {
+      if (fs.existsSync(iconPath)) {
+        console.log('🎨 Using notification icon:', iconPath);
+        return iconPath;
+      }
     }
+    
+    // Ultimate fallback - no icon
+    console.warn('⚠️ No notification icon found, using default');
+    return null;
   }
 
   // Get urgency level for notification type
