@@ -241,25 +241,49 @@ export class DatabaseSync {
   /**
    * Sync file changes to database
    */
-  async syncFileChanges(sessionId: string, fileChanges: FileChange[]): Promise<void> {
+  async syncFileChanges(sessionId: string, userId: string, projectId: string, fileChanges: FileChange[]): Promise<void> {
     try {
-      // In a real implementation, this would batch upsert to live_file_changes
-      // const upsertData = fileChanges.map(change => ({
-      //   session_id: sessionId,
-      //   file_path: change.filePath,
-      //   file_type: change.fileType,
-      //   change_type: change.changeType,
-      //   lines_added: change.linesAdded,
-      //   lines_removed: change.linesRemoved,
-      //   characters_added: change.charactersAdded,
-      //   characters_removed: change.charactersRemoved,
-      //   first_change_at: change.firstChangeAt.toISOString(),
-      //   last_change_at: change.lastChangeAt.toISOString()
-      // }))
+      if (!this.supabaseUrl || !this.supabaseKey) {
+        console.warn('Supabase configuration missing, skipping file changes sync')
+        return
+      }
 
-      // const { error } = await supabase
-      //   .from('live_file_changes')
-      //   .upsert(upsertData)
+      if (fileChanges.length === 0) {
+        return
+      }
+
+      // Prepare upsert data for live_file_changes table
+      const upsertData = fileChanges.map(change => ({
+        session_id: sessionId,
+        user_id: userId,
+        project_id: projectId,
+        file_path: change.filePath,
+        file_type: change.fileType,
+        change_type: change.changeType,
+        lines_added: change.linesAdded,
+        lines_removed: change.linesRemoved,
+        characters_added: change.charactersAdded,
+        characters_removed: change.charactersRemoved,
+        first_change_at: change.firstChangeAt.toISOString(),
+        last_change_at: change.lastChangeAt.toISOString()
+      }))
+
+      // Make fetch request to Supabase REST API
+      const response = await fetch(`${this.supabaseUrl}/rest/v1/live_file_changes`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': this.supabaseKey,
+          'Authorization': `Bearer ${this.supabaseKey}`,
+          'Prefer': 'resolution=merge-duplicates'
+        },
+        body: JSON.stringify(upsertData)
+      })
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(`Supabase API error: ${response.status} - ${errorText}`)
+      }
 
       console.log(`💾 Synced ${fileChanges.length} file changes for session ${sessionId}`)
     } catch (error) {

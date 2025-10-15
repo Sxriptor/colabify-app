@@ -359,4 +359,89 @@ export class ActivityDetector {
       remoteBranches: [...state.remoteBranches]
     }
   }
+
+  /**
+   * Detect file changes from repository state
+   * Returns list of changed files with their change types
+   */
+  static async detectFileChanges(
+    cwd: string,
+    currentState: RepoState
+  ): Promise<Array<{ filePath: string, changeType: 'MODIFIED' | 'ADDED' | 'DELETED' | 'RENAMED', linesAdded: number, linesRemoved: number }>> {
+    try {
+      const fileChanges: Array<{ filePath: string, changeType: 'MODIFIED' | 'ADDED' | 'DELETED' | 'RENAMED', linesAdded: number, linesRemoved: number }> = []
+      
+      // Parse status output to get changed files
+      if (!currentState.statusShort || currentState.statusShort.trim() === '') {
+        return fileChanges
+      }
+
+      const statusLines = currentState.statusShort.split('\n').filter(line => line.trim())
+      
+      for (const line of statusLines) {
+        if (line.length < 3) continue
+        
+        const status = line.substring(0, 2)
+        const filePath = line.substring(3).trim()
+        
+        let changeType: 'MODIFIED' | 'ADDED' | 'DELETED' | 'RENAMED' = 'MODIFIED'
+        
+        // Determine change type from git status codes
+        if (status.includes('A')) {
+          changeType = 'ADDED'
+        } else if (status.includes('D')) {
+          changeType = 'DELETED'
+        } else if (status.includes('R')) {
+          changeType = 'RENAMED'
+        } else if (status.includes('M') || status.includes('U')) {
+          changeType = 'MODIFIED'
+        }
+
+        // Get diff stats for the file (if not deleted)
+        let linesAdded = 0
+        let linesRemoved = 0
+        
+        if (changeType !== 'DELETED') {
+          try {
+            const diffResult = await GitExecutor.exec(['diff', '--numstat', 'HEAD', '--', filePath], cwd)
+            const diffLine = diffResult.stdout.trim()
+            if (diffLine) {
+              const parts = diffLine.split('\t')
+              if (parts.length >= 2) {
+                linesAdded = parseInt(parts[0]) || 0
+                linesRemoved = parseInt(parts[1]) || 0
+              }
+            }
+          } catch (diffError) {
+            // File might be unstaged, try without HEAD
+            try {
+              const diffResult = await GitExecutor.exec(['diff', '--numstat', '--', filePath], cwd)
+              const diffLine = diffResult.stdout.trim()
+              if (diffLine) {
+                const parts = diffLine.split('\t')
+                if (parts.length >= 2) {
+                  linesAdded = parseInt(parts[0]) || 0
+                  linesRemoved = parseInt(parts[1]) || 0
+                }
+              }
+            } catch {
+              // Unable to get diff stats, use defaults
+            }
+          }
+        }
+
+        fileChanges.push({
+          filePath,
+          changeType,
+          linesAdded,
+          linesRemoved
+        })
+      }
+
+      return fileChanges
+    } catch (error) {
+      console.error('Failed to detect file changes:', error)
+      return []
+    }
+  }
 }

@@ -284,10 +284,63 @@ export class GitMonitoringBackend {
           filePath: activity.details.filePath,
           occurredAt: new Date(activity.at)
         })
+
+        // Detect and sync file changes for WORKTREE_CHANGE and COMMIT activities
+        if (activity.type === 'WORKTREE_CHANGE' || activity.type === 'COMMIT') {
+          await this.detectAndSyncFileChanges(activity, sessionId)
+        }
       }
 
     } catch (error) {
       console.error('❌ Error handling activity:', error)
+    }
+  }
+
+  /**
+   * Detect and sync file changes from git activity
+   */
+  private async detectAndSyncFileChanges(activity: Activity, sessionId: string): Promise<void> {
+    try {
+      // Get repository configuration
+      const repoConfig = this.repoStore.get(activity.repoId)
+      if (!repoConfig) {
+        console.warn(`Repository ${activity.repoId} not found in store`)
+        return
+      }
+
+      // Get current repository state
+      const currentState = await GitState.readRepoState(repoConfig.path)
+      
+      // Detect file changes using ActivityDetector
+      const { ActivityDetector } = await import('./ActivityDetector')
+      const fileChanges = await ActivityDetector.detectFileChanges(repoConfig.path, currentState)
+      
+      if (fileChanges.length > 0) {
+        console.log(`📁 Detected ${fileChanges.length} file changes`)
+        
+        // Convert to FileChange format for database sync
+        const fileChangeRecords = fileChanges.map(change => ({
+          filePath: change.filePath,
+          fileType: change.filePath.split('.').pop() || '',
+          changeType: change.changeType,
+          linesAdded: change.linesAdded,
+          linesRemoved: change.linesRemoved,
+          charactersAdded: 0, // Will be calculated by file watcher
+          charactersRemoved: 0,
+          firstChangeAt: new Date(),
+          lastChangeAt: new Date()
+        }))
+
+        // Sync to database
+        await this.databaseSync.syncFileChanges(
+          sessionId,
+          this.config.userId,
+          activity.projectId,
+          fileChangeRecords
+        )
+      }
+    } catch (error) {
+      console.error('Error detecting and syncing file changes:', error)
     }
   }
 

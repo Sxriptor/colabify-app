@@ -498,11 +498,20 @@ export class LiveActivityMonitor {
       }
     }
 
-    // Sync file changes
+    // Sync file changes to database
     for (const [sessionId, changes] of this.fileChanges.entries()) {
-      // In a real implementation, this would sync to live_file_changes table
       if (changes.size > 0) {
-        console.log(`💾 Synced ${changes.size} file changes for session ${sessionId}`)
+        const session = this.sessions.get(sessionId)
+        if (session) {
+          const fileChangesArray = Array.from(changes.values())
+          await this.databaseSync.syncFileChanges(
+            sessionId,
+            session.userId,
+            session.projectId,
+            fileChangesArray
+          )
+          console.log(`💾 Synced ${changes.size} file changes for session ${sessionId} to database`)
+        }
       }
     }
   }
