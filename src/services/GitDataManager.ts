@@ -599,7 +599,7 @@ class GitDataManagerService {
   }
 
   /**
-   * Sync file changes to database via API
+   * Sync file changes to database directly via Supabase client
    */
   private async syncFileChangesToDatabase(
     projectId: string,
@@ -617,45 +617,82 @@ class GitDataManagerService {
     }
 
     try {
-      // Create a session ID for this sync (or get existing active session)
-      const sessionId = `session-${projectId}-${repositoryId}-${Date.now()}`
+      // Get or create session for this project
+      const { createElectronClient } = await import('@/lib/supabase/electron-client')
+      const supabase = await createElectronClient()
 
-      // Format file changes for API
-      const formattedChanges = fileChanges.map(change => ({
-        filePath: change.filePath,
-        fileType: change.filePath.split('.').pop() || '',
-        changeType: change.changeType,
-        linesAdded: change.linesAdded || 0,
-        linesRemoved: change.linesRemoved || 0,
-        charactersAdded: 0, // Not available from git status
-        charactersRemoved: 0,
-        firstChangeAt: new Date().toISOString(),
-        lastChangeAt: new Date().toISOString()
-      }))
+      // Get or create ONE session per project
+      let sessionId: string | null = null
 
-      // Call API to sync file changes
-      const response = await fetch('/api/live-activities/file-changes', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          sessionId,
-          projectId,
-          fileChanges: formattedChanges
-        })
-      })
+      const { data: existingSession } = await supabase
+        .from('live_activity_sessions')
+        .select('id')
+        .eq('project_id', projectId)
+        .eq('user_id', userId)
+        .limit(1)
+        .single()
 
-      if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.error || 'Failed to sync file changes')
+      if (existingSession) {
+        sessionId = existingSession.id
+      } else {
+        // Create new session
+        const { data: newSession, error: sessionError } = await supabase
+          .from('live_activity_sessions')
+          .insert({
+            user_id: userId,
+            project_id: projectId,
+            repository_id: repositoryId,
+            local_path: '',
+            is_active: true
+          })
+          .select('id')
+          .single()
+
+        if (sessionError) {
+          console.error('Failed to create session:', sessionError)
+          return
+        }
+
+        sessionId = newSession?.id
       }
 
-      const result = await response.json()
-      console.log(`✅ [GitDataManager] File changes synced:`, result)
+      if (!sessionId) {
+        console.warn('No session ID available, skipping file changes sync')
+        return
+      }
+
+      // Format file changes for database
+      const formattedChanges = fileChanges.map(change => ({
+        session_id: sessionId,
+        user_id: userId,
+        project_id: projectId,
+        file_path: change.filePath,
+        file_type: change.filePath.split('.').pop() || '',
+        change_type: change.changeType,
+        lines_added: change.linesAdded || 0,
+        lines_removed: change.linesRemoved || 0,
+        characters_added: 0,
+        characters_removed: 0,
+        first_change_at: new Date().toISOString(),
+        last_change_at: new Date().toISOString()
+      }))
+
+      // Insert file changes directly
+      const { error: insertError } = await supabase
+        .from('live_file_changes')
+        .upsert(formattedChanges, {
+          onConflict: 'session_id,file_path',
+          ignoreDuplicates: false
+        })
+
+      if (insertError) {
+        console.error('❌ [GitDataManager] Failed to insert file changes:', insertError)
+        return
+      }
+
+      console.log(`✅ [GitDataManager] Synced ${fileChanges.length} file changes directly to database`)
     } catch (error) {
       console.error('❌ [GitDataManager] Error syncing file changes:', error)
-      throw error
     }
   }
 
