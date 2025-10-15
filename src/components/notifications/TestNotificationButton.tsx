@@ -74,7 +74,8 @@ export function TestNotificationButton() {
       setTimeout(() => setMessage(''), 3000)
     } catch (error) {
       console.error('Error creating test notification:', error)
-      setMessage('❌ Failed to create test notification: ' + error.message)
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      setMessage('❌ Failed to create test notification: ' + errorMessage)
       setTimeout(() => setMessage(''), 5000)
     } finally {
       setLoading(false)
