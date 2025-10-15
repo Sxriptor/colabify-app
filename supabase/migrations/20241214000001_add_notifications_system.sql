@@ -125,3 +125,9 @@ CREATE TRIGGER cleanup_notifications_trigger
   AFTER INSERT ON notifications
   FOR EACH ROW
   EXECUTE FUNCTION cleanup_user_notifications();
+
+-- Enable real-time for notifications_log table (this is what we're listening to)
+ALTER PUBLICATION supabase_realtime ADD TABLE notifications_log;
+
+-- Enable real-time for notifications table (in case we need it later)
+ALTER PUBLICATION supabase_realtime ADD TABLE notifications;

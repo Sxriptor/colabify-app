@@ -9,6 +9,7 @@ class NotificationService {
     this.isPolling = false;
     this.lastCheckedAt = new Date();
     this.accessToken = null;
+    this.subscription = null;
     
     this.initializeSupabase();
   }
@@ -35,17 +36,16 @@ class NotificationService {
     }
   }
 
-  // Start notification polling for a user
+  // Start real-time notification listening for a user
   async startPolling(userId, accessToken) {
-    console.log('🔔 Starting notification polling for user:', userId);
+    console.log('🔔 Starting real-time notification listening for user:', userId);
     
     if (!this.supabase) {
-      console.error('❌ Cannot start polling: Supabase not initialized');
+      console.error('❌ Cannot start listening: Supabase not initialized');
       return;
     }
     
     this.currentUserId = userId;
-    this.lastCheckedAt = new Date();
 
     // Store the access token and create authenticated client
     if (accessToken) {
@@ -73,32 +73,93 @@ class NotificationService {
       console.warn('⚠️ No access token provided for notification service');
     }
 
-    // For now, always start polling - we'll check preferences during polling
-    // TODO: Re-enable preference check once user records are properly migrated
-    console.log('🔔 Starting polling (preference check temporarily disabled for testing)');
-
-    // Stop existing polling
+    // Stop existing subscriptions
     this.stopPolling();
 
-    // Start polling every 30 seconds
+    // Set up real-time subscription for notifications_log table
     this.isPolling = true;
-    this.pollingInterval = setInterval(() => {
-      this.checkForNewNotifications();
-    }, 30000);
+    
+    try {
+      console.log('🔔 Setting up real-time subscription for notifications...');
+      
+      this.subscription = this.supabase
+        .channel('notification-changes')
+        .on(
+          'postgres_changes',
+          {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'notifications_log',
+            filter: `user_id=eq.${userId}`
+          },
+          (payload) => {
+            console.log('🔔 New notification log received:', payload);
+            this.handleNewNotificationLog(payload.new);
+          }
+        )
+        .subscribe((status) => {
+          console.log('🔔 Subscription status:', status);
+          if (status === 'SUBSCRIBED') {
+            console.log('✅ Real-time notifications active');
+          }
+        });
 
-    console.log('✅ Notification polling started, checking immediately...');
-    // Check immediately
-    this.checkForNewNotifications();
+    } catch (error) {
+      console.error('❌ Failed to set up real-time subscription:', error);
+    }
   }
 
-  // Stop notification polling
+  // Stop notification listening
   stopPolling() {
-    console.log('🔔 Stopping notification polling');
+    console.log('🔔 Stopping notification listening');
     
     this.isPolling = false;
+    
+    // Unsubscribe from real-time changes
+    if (this.subscription) {
+      this.supabase.removeChannel(this.subscription);
+      this.subscription = null;
+      console.log('✅ Real-time subscription removed');
+    }
+    
+    // Legacy: remove polling interval if it exists
     if (this.pollingInterval) {
       clearInterval(this.pollingInterval);
       this.pollingInterval = null;
+    }
+  }
+
+  // Handle new notification log from real-time subscription
+  async handleNewNotificationLog(logData) {
+    try {
+      console.log('🔔 Processing new notification log:', logData);
+      
+      // Only process app notifications that are pending
+      if (logData.delivery_method !== 'app' || logData.delivery_status !== 'pending') {
+        console.log('📭 Skipping non-app or non-pending notification');
+        return;
+      }
+
+      // Get the actual notification data
+      const { data: notification, error } = await this.supabase
+        .from('notifications')
+        .select('*')
+        .eq('id', logData.notification_id)
+        .single();
+
+      if (error) {
+        console.error('❌ Error fetching notification:', error);
+        return;
+      }
+
+      if (notification) {
+        console.log('🔔 Showing system notification for:', notification.title);
+        await this.showSystemNotification(notification, logData.id);
+      } else {
+        console.warn('⚠️ No notification found for log:', logData.notification_id);
+      }
+    } catch (error) {
+      console.error('❌ Error handling new notification log:', error);
     }
   }
 
