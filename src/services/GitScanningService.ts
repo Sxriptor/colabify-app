@@ -33,7 +33,8 @@ export class GitScanningService {
   private electronAPI: any
 
   constructor() {
-    this.electronAPI = (window as any).electronAPI
+    // Only access window in browser environment
+    this.electronAPI = typeof window !== 'undefined' ? (window as any).electronAPI : null
   }
 
   /**

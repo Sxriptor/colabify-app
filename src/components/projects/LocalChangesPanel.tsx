@@ -1,32 +1,24 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useMemo } from 'react'
 import { useAuth } from '@/lib/auth/context'
-
-interface LocalChange {
-  id: string
-  filePath: string
-  changeType: 'MODIFIED' | 'ADDED' | 'DELETED' | 'RENAMED' | 'UNTRACKED'
-  status: string
-  repository: string
-  localPath: string
-}
-
-interface LocalCommit {
-  sha: string
-  message: string
-  date: string
-  branch: string
-  author: {
-    name: string
-    email: string
-  }
-}
+import { useUnifiedGitData } from '@/hooks/useUnifiedGitData'
 
 interface LocalChangesData {
   branch: string
-  uncommittedChanges: LocalChange[]
-  recentCommits: LocalCommit[]
+  uncommittedChanges: Array<{
+    id: string
+    filePath: string
+    changeType: 'MODIFIED' | 'ADDED' | 'DELETED' | 'RENAMED' | 'UNTRACKED'
+    status: string
+  }>
+  recentCommits: Array<{
+    sha: string
+    message: string
+    date: string
+    branch: string
+    author: { name: string; email: string }
+  }>
   ahead: number
   behind: number
   dirty: boolean
@@ -40,180 +32,67 @@ interface LocalChangesPanelProps {
 
 export function LocalChangesPanel({ project }: LocalChangesPanelProps) {
   const { user } = useAuth()
-  const [localChangesData, setLocalChangesData] = useState<LocalChangesData[]>([])
-  const [loading, setLoading] = useState(false)
+
+  // ✅ USE UNIFIED GIT DATA HOOK - Single source of truth
+  const {
+    branches,
+    commits,
+    uncommittedChanges,
+    loading,
+    usingCache
+  } = useUnifiedGitData({
+    projectId: project.id,
+    userId: user?.id,
+    autoRefresh: true,
+    refreshIntervalMs: 5000 // Check for changes every 5 seconds
+  })
 
   // Check if we're in Electron environment
   const isElectron = typeof window !== 'undefined' && (window as any).electronAPI
 
-  useEffect(() => {
-    if (!user || !isElectron) {
-      return
+  // Transform unified data into LocalChangesData format
+  const localChangesData = useMemo<LocalChangesData[]>(() => {
+    const result: LocalChangesData[] = []
+
+    for (const branch of branches) {
+      // Get recent commits for this branch/repo
+      const recentCommits = commits
+        .filter(c => c.branch === branch.branch || !c.branch)
+        .slice(0, 5)
+        .map(c => ({
+          sha: c.sha,
+          message: c.message,
+          date: c.date,
+          branch: c.branch || branch.branch,
+          author: c.author
+        }))
+
+      // Get uncommitted changes for this repo
+      const repoUncommittedChanges = uncommittedChanges
+        .filter(change => change.localPath === branch.path)
+        .map(change => ({
+          id: change.id,
+          filePath: change.filePath,
+          changeType: change.changeType,
+          status: change.status
+        }))
+
+      result.push({
+        branch: branch.branch,
+        uncommittedChanges: repoUncommittedChanges,
+        recentCommits,
+        ahead: branch.ahead,
+        behind: branch.behind,
+        dirty: branch.dirty || repoUncommittedChanges.length > 0,
+        localPath: branch.path,
+        repositoryName: branch.name
+      })
     }
 
-    // Initial fetch
-    fetchLocalChanges()
+    return result
+  }, [branches, commits, uncommittedChanges])
 
-    // Set up auto-refresh every 10 seconds
-    const refreshInterval = setInterval(() => {
-      console.log('⏰ Auto-refreshing local changes data...')
-      fetchLocalChanges()
-    }, 10000) // 10 seconds
-
-    // Cleanup interval on unmount
-    return () => {
-      clearInterval(refreshInterval)
-    }
-  }, [user, project.id, isElectron])
-
-  const fetchLocalChanges = async () => {
-    setLoading(true)
-    try {
-      // Get repository local mappings for current user only
-      const { createElectronClient } = await import('@/lib/supabase/electron-client')
-      const supabase = await createElectronClient()
-
-      const { data: repositories, error: repoError } = await supabase
-        .from('repositories')
-        .select(`
-          id,
-          name,
-          full_name,
-          local_mappings:repository_local_mappings(
-            id,
-            local_path,
-            user_id
-          )
-        `)
-        .eq('project_id', project.id)
-
-      if (repoError) {
-        console.error('Error fetching repositories:', repoError)
-        return
-      }
-
-      console.log('📦 Fetched repositories for local changes:', repositories)
-
-      const allLocalChanges: LocalChangesData[] = []
-
-      if (repositories && repositories.length > 0) {
-        for (const repo of repositories) {
-          if (repo.local_mappings && repo.local_mappings.length > 0) {
-            // Filter to only current user's mappings
-            const userMappings = repo.local_mappings.filter(
-              (mapping: any) => mapping.user_id === user?.id
-            )
-
-            for (const mapping of userMappings) {
-              try {
-                console.log(`🔍 Reading local changes for ${mapping.local_path}`)
-
-                // Check if path is accessible
-                const electronAPI = (window as any).electronAPI
-                if (!electronAPI?.git?.readDirectGitState) {
-                  console.warn('Git API not available')
-                  continue
-                }
-
-                // Get git state
-                const gitState = await electronAPI.git.readDirectGitState(mapping.local_path)
-                console.log(`📊 Git state for ${mapping.local_path}:`, gitState)
-
-                // Get uncommitted changes
-                const uncommittedChanges: LocalChange[] = []
-                if (gitState.statusShort) {
-                  // Parse git status output
-                  const statusLines = gitState.statusShort.split('\n').filter((line: string) => line.trim())
-                  statusLines.forEach((line: string, index: number) => {
-                    const match = line.match(/^([A-Z?]{1,2})\s+(.+)$/)
-                    if (match) {
-                      const status = match[1]
-                      const filePath = match[2]
-
-                      let changeType: LocalChange['changeType'] = 'MODIFIED'
-                      if (status.includes('A')) changeType = 'ADDED'
-                      else if (status.includes('D')) changeType = 'DELETED'
-                      else if (status.includes('R')) changeType = 'RENAMED'
-                      else if (status.includes('?')) changeType = 'UNTRACKED'
-                      else if (status.includes('M')) changeType = 'MODIFIED'
-
-                      uncommittedChanges.push({
-                        id: `${mapping.local_path}-${index}`,
-                        filePath,
-                        changeType,
-                        status,
-                        repository: repo.name,
-                        localPath: mapping.local_path
-                      })
-                    }
-                  })
-                }
-
-                // Get recent commits
-                const recentCommits: LocalCommit[] = []
-                if (electronAPI.git.readCompleteHistory) {
-                  try {
-                    const history = await electronAPI.git.readCompleteHistory(mapping.local_path, {
-                      maxCommits: 5,
-                      includeBranches: true,
-                      includeStats: true
-                    })
-
-                    if (history && history.commits) {
-                      history.commits.forEach((commit: any) => {
-                        recentCommits.push({
-                          sha: commit.sha,
-                          message: commit.message,
-                          date: commit.date,
-                          branch: commit.branch || gitState.branch,
-                          author: commit.author
-                        })
-                      })
-                    }
-                  } catch (historyError) {
-                    console.warn('Could not read complete history:', historyError)
-                  }
-                }
-
-                allLocalChanges.push({
-                  branch: gitState.branch || 'main',
-                  uncommittedChanges,
-                  recentCommits,
-                  ahead: gitState.ahead || 0,
-                  behind: gitState.behind || 0,
-                  dirty: gitState.dirty || uncommittedChanges.length > 0,
-                  localPath: mapping.local_path,
-                  repositoryName: repo.name
-                })
-
-              } catch (error) {
-                console.error(`Error reading local changes for ${mapping.local_path}:`, error)
-              }
-            }
-          }
-        }
-      }
-
-      console.log('📊 All local changes:', allLocalChanges)
-
-      // Compare with existing data to see if update is needed
-      const hasChanges = JSON.stringify(allLocalChanges) !== JSON.stringify(localChangesData)
-
-      if (hasChanges) {
-        console.log('🔄 Local changes detected, updating UI')
-        setLocalChangesData(allLocalChanges)
-      } else {
-        console.log('✅ No local changes detected, skipping update')
-      }
-
-    } catch (error) {
-      console.error('Failed to fetch local changes:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const getChangeIcon = (changeType: LocalChange['changeType']) => {
+  const getChangeIcon = (changeType: 'MODIFIED' | 'ADDED' | 'DELETED' | 'RENAMED' | 'UNTRACKED') => {
     switch (changeType) {
       case 'ADDED': return '✅'
       case 'MODIFIED': return '📝'
@@ -224,7 +103,7 @@ export function LocalChangesPanel({ project }: LocalChangesPanelProps) {
     }
   }
 
-  const getChangeColor = (changeType: LocalChange['changeType']) => {
+  const getChangeColor = (changeType: 'MODIFIED' | 'ADDED' | 'DELETED' | 'RENAMED' | 'UNTRACKED') => {
     switch (changeType) {
       case 'ADDED': return 'text-green-600'
       case 'MODIFIED': return 'text-blue-600'
