@@ -63,7 +63,7 @@ BEGIN
       )
       RETURNING id INTO notification_id;
 
-      -- Create notification log entries based on preferences
+      -- Create notification log entries based on preferenc
       -- App notification (if enabled)
       IF (team_member.notification_preferences->>'app')::boolean = true THEN
         INSERT INTO notifications_log (
