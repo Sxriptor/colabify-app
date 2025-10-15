@@ -62,10 +62,29 @@ console.log('✅ Early IPC handlers registered');
 // No protocol registration needed - using external browser with local callback server
 
 function createWindow() {
-  // Use .ico on Windows for better taskbar/window icon quality
-  const iconPath = process.platform === 'win32' 
-    ? path.join(__dirname, '../build/icon.ico')
-    : path.join(__dirname, '../public/icons/colabify.png');
+  // Use platform-specific icons for best quality
+  // In development, use public folder; in production, use build folder
+  const getIconPath = () => {
+    if (process.platform === 'win32') {
+      return isDev 
+        ? path.join(__dirname, '../public/icons/icon-512x512.png')
+        : path.join(__dirname, '../build/icon.ico');
+    } else if (process.platform === 'darwin') {
+      return isDev 
+        ? path.join(__dirname, '../public/icons/icon.icns')
+        : path.join(__dirname, '../build/icon.icns');
+    } else {
+      return path.join(__dirname, '../public/icons/colabify.png');
+    }
+  };
+  
+  const iconPath = getIconPath();
+    
+  console.log('🎨 Icon configuration:');
+  console.log('  Platform:', process.platform);
+  console.log('  Development mode:', isDev);
+  console.log('  Icon path:', iconPath);
+  console.log('  Icon exists:', require('fs').existsSync(iconPath));
     
   mainWindow = new BrowserWindow({
     width: 1200,
@@ -412,6 +431,36 @@ if (!gotTheLock) {
 
 // App lifecycle events
 app.whenReady().then(() => {
+  // Set dock icon for macOS
+  if (process.platform === 'darwin') {
+    const dockIconPath = isDev 
+      ? path.join(__dirname, '../public/icons/icon.icns')
+      : path.join(__dirname, '../build/icon.icns');
+    console.log('🎨 Setting dock icon:', dockIconPath);
+    console.log('🎨 Dock icon exists:', require('fs').existsSync(dockIconPath));
+    
+    if (require('fs').existsSync(dockIconPath)) {
+      try {
+        app.dock.setIcon(dockIconPath);
+        console.log('✅ Dock icon set successfully');
+      } catch (error) {
+        console.log('❌ Failed to set dock icon:', error.message);
+        // Fallback to PNG if ICNS fails
+        const fallbackIcon = path.join(__dirname, '../public/icons/icon-512x512.png');
+        if (require('fs').existsSync(fallbackIcon)) {
+          try {
+            app.dock.setIcon(fallbackIcon);
+            console.log('✅ Fallback PNG dock icon set successfully');
+          } catch (fallbackError) {
+            console.log('❌ Fallback icon also failed:', fallbackError.message);
+          }
+        }
+      }
+    } else {
+      console.log('❌ Dock icon file not found');
+    }
+  }
+  
   createWindow();
 
   app.on('activate', () => {
