@@ -68,7 +68,7 @@ export function TestNotificationButton() {
 
       if (error) throw error
 
-      setMessage('✅ Git activity notification sent! Check your system notifications and inbox.')
+      setMessage('✅ Git activity notification sent! Check your system notifications, email, and inbox.')
       
       // Clear message after 3 seconds
       setTimeout(() => setMessage(''), 3000)
