@@ -10,7 +10,7 @@ DECLARE
   repo_record RECORD;
   existing_session_id UUID;
 BEGIN
-  -- Only process if git_data_cache has 
+  -- Only process if git_data_cache 
   IF NEW.git_data_cache IS NULL OR
      NEW.git_data_cache->'commits' IS NULL OR
      jsonb_array_length(NEW.git_data_cache->'commits') = 0 THEN
