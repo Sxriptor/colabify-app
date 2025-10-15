@@ -63,15 +63,15 @@ console.log('✅ Early IPC handlers registered');
 
 function createWindow() {
   // Use platform-specific icons for best quality
-  // In development, use public folder; in production, use build folder
+  // Windows ALWAYS needs .ico for crisp taskbar/window icons (even in dev)
+  // Mac uses .icns, Linux uses PNG
   const getIconPath = () => {
     if (process.platform === 'win32') {
-      return isDev 
-        ? path.join(__dirname, '../public/icons/icon-512x512.png')
-        : path.join(__dirname, '../build/icon.ico');
+      // Always use .ico on Windows for best quality
+      return path.join(__dirname, '../build/icon.ico');
     } else if (process.platform === 'darwin') {
       return isDev 
-        ? path.join(__dirname, '../public/icons/icon.icns')
+        ? path.join(__dirname, '../public/icons/colabify.png')
         : path.join(__dirname, '../build/icon.icns');
     } else {
       return path.join(__dirname, '../public/icons/colabify.png');
