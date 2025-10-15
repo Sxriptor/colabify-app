@@ -290,16 +290,32 @@ class NotificationService {
 
       // Handle notification click
       systemNotification.on('click', () => {
-        console.log('🖱️ Notification clicked');
-        // Focus the app window
+        console.log('🖱️ Notification clicked - opening inbox');
+        
+        // Focus the app window and navigate to inbox
         const { BrowserWindow } = require('electron');
         const windows = BrowserWindow.getAllWindows();
         if (windows.length > 0) {
           const mainWindow = windows[0];
+          
+          // Restore and focus the window
           if (mainWindow.isMinimized()) {
             mainWindow.restore();
           }
           mainWindow.focus();
+          
+          // Navigate to inbox page
+          mainWindow.webContents.executeJavaScript(`
+            if (window.location.pathname !== '/inbox') {
+              window.location.href = '/inbox';
+            }
+          `).catch(err => {
+            console.error('❌ Failed to navigate to inbox:', err);
+          });
+          
+          console.log('✅ App focused and navigated to inbox');
+        } else {
+          console.warn('⚠️ No main window found');
         }
       });
 

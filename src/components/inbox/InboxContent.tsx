@@ -66,8 +66,10 @@ export function InboxContent() {
   const [processingInvites, setProcessingInvites] = useState<Set<string>>(new Set())
 
   useEffect(() => {
-    fetchInboxData()
-  }, [])
+    if (user) {
+      fetchInboxData()
+    }
+  }, [user])
 
   const fetchInboxData = async () => {
     await Promise.all([fetchInvitations(), fetchNotifications()])
@@ -114,6 +116,13 @@ export function InboxContent() {
 
   const fetchNotifications = async () => {
     try {
+      // Guard clause: ensure user is available
+      if (!user?.id) {
+        console.log('No user available for fetching notifications');
+        setNotifications([]);
+        return;
+      }
+
       const { createElectronClient } = await import('@/lib/supabase/electron-client')
       const supabase = await createElectronClient()
 
@@ -121,10 +130,10 @@ export function InboxContent() {
       const { data: userProjects, error: projectsError } = await supabase
         .from('projects')
         .select('id')
-        .or(`owner_id.eq.${user!.id},id.in.(${supabase
+        .or(`owner_id.eq.${user.id},id.in.(${supabase
           .from('project_members')
           .select('project_id')
-          .eq('user_id', user!.id)
+          .eq('user_id', user.id)
           .eq('status', 'active')
           })`)
 
@@ -302,9 +311,9 @@ export function InboxContent() {
                               {notification.project.name} - {notification.repository.name}
                             </h4>
                             <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${notification.event_type === 'push' ? 'bg-green-100 text-green-800' :
-                                notification.event_type === 'pull_request' ? 'bg-blue-100 text-blue-800' :
-                                  notification.event_type === 'issues' ? 'bg-red-100 text-red-800' :
-                                    'bg-gray-100 text-gray-800'
+                              notification.event_type === 'pull_request' ? 'bg-blue-100 text-blue-800' :
+                                notification.event_type === 'issues' ? 'bg-red-100 text-red-800' :
+                                  'bg-gray-100 text-gray-800'
                               }`}>
                               {notification.event_type}
                             </span>
@@ -380,8 +389,8 @@ export function InboxContent() {
                               {invitation.project.name}
                             </h3>
                             <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${invitation.project.visibility === 'public'
-                                ? 'bg-green-100 text-green-800'
-                                : 'bg-gray-100 text-gray-800'
+                              ? 'bg-green-100 text-green-800'
+                              : 'bg-gray-100 text-gray-800'
                               }`}>
                               {invitation.project.visibility}
                             </span>
