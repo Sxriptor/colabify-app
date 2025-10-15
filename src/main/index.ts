@@ -5,6 +5,7 @@ import { BrowserWindow } from 'electron'
 import { GitIPC } from './ipc/GitIPC'
 import { ProjectWatcherManager } from './services/ProjectWatcherManager'
 import { RepoStore } from './store/RepoStore'
+import { setupNotificationIPC, cleanupNotificationIPC } from './ipc/NotificationIPC'
 
 export class GitMonitoringBackend {
   private projectWatcherManager: ProjectWatcherManager
@@ -42,6 +43,9 @@ export class GitMonitoringBackend {
       
       // Register IPC handlers
       this.gitIPC.registerHandlers()
+      
+      // Setup notification IPC handlers
+      setupNotificationIPC()
       
       // Restore watching state for projects that were previously being watched
       await this.projectWatcherManager.restoreWatchingProjects()
@@ -81,6 +85,9 @@ export class GitMonitoringBackend {
       
       // Cleanup IPC handlers
       this.gitIPC.cleanup()
+      
+      // Cleanup notification IPC handlers
+      cleanupNotificationIPC()
       
       this.initialized = false
       console.log('✅ Git monitoring backend cleaned up successfully')

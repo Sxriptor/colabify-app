@@ -4,6 +4,9 @@ import { useAuth } from '@/lib/auth/context'
 import { useState, useEffect } from 'react'
 import { ProjectCard } from '@/components/projects/ProjectCard'
 import { CreateProjectForm } from '@/components/projects/CreateProjectForm'
+import { NotificationSettings } from '@/components/notifications/NotificationSettings'
+import { useElectronNotifications } from '@/hooks/useElectronNotifications'
+import { TestNotificationButton } from '@/components/notifications/TestNotificationButton'
 
 export function DashboardContent() {
   const { user, customUser, signOut } = useAuth()
@@ -11,6 +14,9 @@ export function DashboardContent() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [showCreateForm, setShowCreateForm] = useState(false)
+  
+  // Initialize Electron notifications
+  useElectronNotifications()
 
   useEffect(() => {
     fetchProjects()
@@ -143,6 +149,8 @@ export function DashboardContent() {
               <span className="text-sm text-gray-700">
                 Welcome, {customUser?.name || customUser?.email || user?.email}
               </span>
+              <TestNotificationButton />
+              <NotificationSettings />
               <button
                 onClick={signOut}
                 className="bg-gray-800 hover:bg-gray-900 text-white px-3 py-2 rounded-md text-sm font-medium transition-colors duration-200"

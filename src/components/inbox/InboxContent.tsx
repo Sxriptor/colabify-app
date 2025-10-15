@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/auth/context'
+import { NotificationInbox } from '@/components/notifications/NotificationInbox'
 
 interface Invitation {
   id: string
@@ -65,8 +66,10 @@ export function InboxContent() {
   const [processingInvites, setProcessingInvites] = useState<Set<string>>(new Set())
 
   useEffect(() => {
-    fetchInboxData()
-  }, [])
+    if (user) {
+      fetchInboxData()
+    }
+  }, [user])
 
   const fetchInboxData = async () => {
     await Promise.all([fetchInvitations(), fetchNotifications()])
@@ -113,6 +116,13 @@ export function InboxContent() {
 
   const fetchNotifications = async () => {
     try {
+      // Guard clause: ensure user is available
+      if (!user?.id) {
+        console.log('No user available for fetching notifications');
+        setNotifications([]);
+        return;
+      }
+
       const { createElectronClient } = await import('@/lib/supabase/electron-client')
       const supabase = await createElectronClient()
 
@@ -120,12 +130,12 @@ export function InboxContent() {
       const { data: userProjects, error: projectsError } = await supabase
         .from('projects')
         .select('id')
-        .or(`owner_id.eq.${user!.id},id.in.(${supabase
+        .or(`owner_id.eq.${user.id},id.in.(${supabase
           .from('project_members')
           .select('project_id')
-          .eq('user_id', user!.id)
+          .eq('user_id', user.id)
           .eq('status', 'active')
-        })`)
+          })`)
 
       if (projectsError || !userProjects || userProjects.length === 0) {
         setNotifications([])
@@ -229,7 +239,7 @@ export function InboxContent() {
     const expiry = new Date(expiresAt)
     const diffMs = expiry.getTime() - now.getTime()
     const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24))
-    
+
     if (diffDays <= 0) return 'Expired'
     if (diffDays === 1) return '1 day left'
     return `${diffDays} days left`
@@ -281,10 +291,15 @@ export function InboxContent() {
             </div>
           )}
 
-          {/* Notifications Section */}
+          {/* App Notifications Section */}
+          <div className="mb-8">
+            <NotificationInbox />
+          </div>
+
+          {/* Legacy Notifications Section */}
           {notifications.length > 0 && (
             <div className="mb-8">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Notifications</h3>
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Legacy Notifications</h3>
               <div className="space-y-4">
                 {notifications.map((notification) => (
                   <div key={notification.id} className="bg-white shadow rounded-lg border border-gray-200">
@@ -295,12 +310,11 @@ export function InboxContent() {
                             <h4 className="text-lg font-medium text-gray-900">
                               {notification.project.name} - {notification.repository.name}
                             </h4>
-                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                              notification.event_type === 'push' ? 'bg-green-100 text-green-800' :
+                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${notification.event_type === 'push' ? 'bg-green-100 text-green-800' :
                               notification.event_type === 'pull_request' ? 'bg-blue-100 text-blue-800' :
-                              notification.event_type === 'issues' ? 'bg-red-100 text-red-800' :
-                              'bg-gray-100 text-gray-800'
-                            }`}>
+                                notification.event_type === 'issues' ? 'bg-red-100 text-red-800' :
+                                  'bg-gray-100 text-gray-800'
+                              }`}>
                               {notification.event_type}
                             </span>
                           </div>
@@ -364,87 +378,87 @@ export function InboxContent() {
                   console.error('Invitation missing project or inviter data:', invitation)
                   return null
                 }
-                
+
                 return (
-                <div key={invitation.id} className="bg-white shadow rounded-lg border border-gray-200">
-                  <div className="p-6">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-3 mb-2">
-                          <h3 className="text-lg font-medium text-gray-900">
-                            {invitation.project.name}
-                          </h3>
-                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                            invitation.project.visibility === 'public' 
-                              ? 'bg-green-100 text-green-800' 
+                  <div key={invitation.id} className="bg-white shadow rounded-lg border border-gray-200">
+                    <div className="p-6">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-3 mb-2">
+                            <h3 className="text-lg font-medium text-gray-900">
+                              {invitation.project.name}
+                            </h3>
+                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${invitation.project.visibility === 'public'
+                              ? 'bg-green-100 text-green-800'
                               : 'bg-gray-100 text-gray-800'
-                          }`}>
-                            {invitation.project.visibility}
-                          </span>
-                        </div>
-                        
-                        {invitation.project.description && (
-                          <p className="text-gray-600 mb-3">{invitation.project.description}</p>
-                        )}
-
-                        <div className="flex items-center gap-4 text-sm text-gray-500 mb-4">
-                          <div>
-                            Invited by <span className="font-medium">{invitation.inviter.name || invitation.inviter.email}</span>
+                              }`}>
+                              {invitation.project.visibility}
+                            </span>
                           </div>
-                          <div>•</div>
-                          <div>{formatDate(invitation.created_at)}</div>
-                          <div>•</div>
-                          <div className="text-orange-600 font-medium">
-                            {getTimeUntilExpiry(invitation.expires_at)}
-                          </div>
-                        </div>
 
-                        <div className="flex items-center gap-3">
-                          <button
-                            onClick={() => handleInvitationResponse(invitation.id, 'accept')}
-                            disabled={processingInvites.has(invitation.id)}
-                            className="bg-green-600 hover:bg-green-700 disabled:bg-green-400 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors duration-200 flex items-center gap-2"
-                          >
-                            {processingInvites.has(invitation.id) ? (
-                              <>
-                                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                                Accepting...
-                              </>
-                            ) : (
-                              <>
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                </svg>
-                                Accept
-                              </>
-                            )}
-                          </button>
-                          
-                          <button
-                            onClick={() => handleInvitationResponse(invitation.id, 'decline')}
-                            disabled={processingInvites.has(invitation.id)}
-                            className="bg-gray-600 hover:bg-gray-700 disabled:bg-gray-400 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors duration-200 flex items-center gap-2"
-                          >
-                            {processingInvites.has(invitation.id) ? (
-                              <>
-                                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                                Declining...
-                              </>
-                            ) : (
-                              <>
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                </svg>
-                                Decline
-                              </>
-                            )}
-                          </button>
+                          {invitation.project.description && (
+                            <p className="text-gray-600 mb-3">{invitation.project.description}</p>
+                          )}
+
+                          <div className="flex items-center gap-4 text-sm text-gray-500 mb-4">
+                            <div>
+                              Invited by <span className="font-medium">{invitation.inviter.name || invitation.inviter.email}</span>
+                            </div>
+                            <div>•</div>
+                            <div>{formatDate(invitation.created_at)}</div>
+                            <div>•</div>
+                            <div className="text-orange-600 font-medium">
+                              {getTimeUntilExpiry(invitation.expires_at)}
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-3">
+                            <button
+                              onClick={() => handleInvitationResponse(invitation.id, 'accept')}
+                              disabled={processingInvites.has(invitation.id)}
+                              className="bg-green-600 hover:bg-green-700 disabled:bg-green-400 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors duration-200 flex items-center gap-2"
+                            >
+                              {processingInvites.has(invitation.id) ? (
+                                <>
+                                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                                  Accepting...
+                                </>
+                              ) : (
+                                <>
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                  </svg>
+                                  Accept
+                                </>
+                              )}
+                            </button>
+
+                            <button
+                              onClick={() => handleInvitationResponse(invitation.id, 'decline')}
+                              disabled={processingInvites.has(invitation.id)}
+                              className="bg-gray-600 hover:bg-gray-700 disabled:bg-gray-400 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors duration-200 flex items-center gap-2"
+                            >
+                              {processingInvites.has(invitation.id) ? (
+                                <>
+                                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                                  Declining...
+                                </>
+                              ) : (
+                                <>
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                  </svg>
+                                  Decline
+                                </>
+                              )}
+                            </button>
+                          </div>
                         </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              )})}
+                )
+              })}
             </div>
           )}
         </div>
