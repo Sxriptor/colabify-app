@@ -2,13 +2,17 @@
 -- Checks user notification preferences before creating notifications
 
 CREATE OR REPLACE FUNCTION notify_team_on_live_activity()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER
+SECURITY DEFINER
+SET search_path = public
+AS $$
 DECLARE
   team_member RECORD;
   notification_id UUID;
   commit_message TEXT;
   actor_name TEXT;
 BEGIN
+  RAISE LOG 'notify_team_on_live_activity triggered for activity_id: %, user_id: %, project_id: %', NEW.id, NEW.user_id, NEW.project_id;
   -- Extract commit message and actor info
   commit_message := NEW.activity_data->>'message';
   actor_name := NEW.activity_data->'author'->>'name';
@@ -63,9 +67,11 @@ BEGIN
       )
       RETURNING id INTO notification_id;
 
-      -- Create notification log entries based on preferen
-      -- App notification (if enabled)
-      IF (team_member.notification_preferences->>'app')::boolean = true THEN
+      -- Create notification log entries based on preferences
+      -- App notification (if enabled or if preference is null, default to true)
+      IF team_member.notification_preferences IS NULL OR
+         team_member.notification_preferences->>'app' IS NULL OR
+         (team_member.notification_preferences->>'app')::boolean = true THEN
         INSERT INTO notifications_log (
           notification_id,
           user_id,
@@ -81,8 +87,10 @@ BEGIN
         );
       END IF;
 
-      -- Email notification (if enabled)
-      IF (team_member.notification_preferences->>'email')::boolean = true THEN
+      -- Email notification (if enabled or if preference is null, default to true)
+      IF team_member.notification_preferences IS NULL OR
+         team_member.notification_preferences->>'email' IS NULL OR
+         (team_member.notification_preferences->>'email')::boolean = true THEN
         INSERT INTO notifications_log (
           notification_id,
           user_id,
