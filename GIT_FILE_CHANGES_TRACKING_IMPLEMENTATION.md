@@ -156,6 +156,8 @@ Created a new API endpoint to handle file change synchronization from the fronte
 
 ## Data Flow
 
+### Backend (TypeScript) - Real-time Monitoring
+
 ```
 1. Git Watcher detects file system changes
    ↓
@@ -174,6 +176,24 @@ Created a new API endpoint to handle file change synchronization from the fronte
 8. API endpoint receives and validates data
    ↓
 9. Data inserted/updated in live_file_changes table
+```
+
+### Frontend - Background Refresh (GitDataManager)
+
+```
+1. Background refresh triggered (every 5 minutes or manually)
+   ↓
+2. GitDataManager.refreshGitData() called
+   ↓
+3. Electron API reads git state (includes fileChanges from git status)
+   ↓
+4. Parse uncommitted changes for UI display
+   ↓
+5. If fileChanges exist, call GitDataManager.syncFileChangesToDatabase()
+   ↓
+6. API endpoint receives and validates data
+   ↓
+7. Data inserted/updated in live_file_changes table
 ```
 
 ## Usage Examples
@@ -323,9 +343,10 @@ Potential improvements:
 
 - `src/main/services/ActivityDetector.ts` - File change detection logic
 - `src/main/services/DatabaseSync.ts` - Database synchronization
-- `src/main/services/GitMonitoringBackend.ts` - Activity handling
+- `src/main/services/GitMonitoringBackend.ts` - Activity handling (real-time)
 - `src/main/services/LiveActivityMonitor.ts` - Session management
-- `electron/git-monitoring-simple.js` - Electron integration
+- `src/services/GitDataManager.ts` - Frontend background refresh and file change syncing
+- `electron/git-monitoring-simple.js` - Electron integration (includes file changes in git state)
 - `src/app/api/live-activities/file-changes/route.ts` - API endpoint
 - `supabase/migrations/20241212000000_add_live_activity_monitoring.sql` - Database schema
 

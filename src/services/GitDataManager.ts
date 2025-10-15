@@ -420,6 +420,21 @@ class GitDataManagerService {
 
             allUncommittedChanges.push(...uncommittedChanges)
 
+            // Sync file changes to database if there are uncommitted changes
+            if (uncommittedChanges.length > 0 && gitState.fileChanges) {
+              try {
+                await this.syncFileChangesToDatabase(
+                  projectId,
+                  userId || mapping.user_id,
+                  repo.id,
+                  gitState.fileChanges
+                )
+                console.log(`💾 [GitDataManager] Synced ${gitState.fileChanges.length} file changes for ${repo.name}`)
+              } catch (syncError) {
+                console.error(`❌ [GitDataManager] Failed to sync file changes:`, syncError)
+              }
+            }
+
             // Check if cache is stale (older than 1 hour) or has changes
             const cacheAge = mapping.git_data_last_updated
               ? Date.now() - new Date(mapping.git_data_last_updated).getTime()
@@ -581,6 +596,67 @@ class GitDataManagerService {
     this.stopAutoRefresh(projectId)
     // Note: We keep the cache in memory for instant re-access
     console.log(`🧹 [GitDataManager] Cleaned up project ${projectId}`)
+  }
+
+  /**
+   * Sync file changes to database via API
+   */
+  private async syncFileChangesToDatabase(
+    projectId: string,
+    userId: string,
+    repositoryId: string,
+    fileChanges: Array<{
+      filePath: string
+      changeType: string
+      linesAdded: number
+      linesRemoved: number
+    }>
+  ): Promise<void> {
+    if (!fileChanges || fileChanges.length === 0) {
+      return
+    }
+
+    try {
+      // Create a session ID for this sync (or get existing active session)
+      const sessionId = `session-${projectId}-${repositoryId}-${Date.now()}`
+
+      // Format file changes for API
+      const formattedChanges = fileChanges.map(change => ({
+        filePath: change.filePath,
+        fileType: change.filePath.split('.').pop() || '',
+        changeType: change.changeType,
+        linesAdded: change.linesAdded || 0,
+        linesRemoved: change.linesRemoved || 0,
+        charactersAdded: 0, // Not available from git status
+        charactersRemoved: 0,
+        firstChangeAt: new Date().toISOString(),
+        lastChangeAt: new Date().toISOString()
+      }))
+
+      // Call API to sync file changes
+      const response = await fetch('/api/live-activities/file-changes', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          sessionId,
+          projectId,
+          fileChanges: formattedChanges
+        })
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Failed to sync file changes')
+      }
+
+      const result = await response.json()
+      console.log(`✅ [GitDataManager] File changes synced:`, result)
+    } catch (error) {
+      console.error('❌ [GitDataManager] Error syncing file changes:', error)
+      throw error
+    }
   }
 
   /**

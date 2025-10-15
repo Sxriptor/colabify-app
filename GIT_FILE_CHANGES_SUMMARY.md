@@ -40,15 +40,33 @@ Created `src/app/api/live-activities/file-changes/route.ts`:
 - POST: Sync file changes to database
 - GET: Retrieve file changes for session/project
 
+### 7. **GitDataManager.ts** (Frontend)
+Updated to sync file changes during background refresh:
+- Added `syncFileChangesToDatabase()` method
+- Calls API when uncommitted changes detected
+- Works with cached data and fresh scans
+
 ## How It Works
 
+### Real-time Path (GitMonitoringBackend)
 ```
-File Changed → Git Status Updated → Activity Detector Triggered
+File Changed → Git Watcher Detects → Activity Triggered
      ↓
 Parse Git Status → Extract File Paths → Get Diff Stats
      ↓
 Create File Change Records → Sync to Database → Update live_file_changes Table
 ```
+
+### Background Refresh Path (GitDataManager)
+```
+Background Timer (5min) → Read Git State → Detect Uncommitted Changes
+     ↓
+Extract fileChanges from Git State → Format for API
+     ↓
+Call /api/live-activities/file-changes → Insert/Update live_file_changes Table
+```
+
+Both paths ensure file changes are tracked whether you're actively monitored or using cached data!
 
 ## What Data Is Tracked
 
