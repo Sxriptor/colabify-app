@@ -220,6 +220,20 @@ class SimpleGitMonitoring {
     
     console.log('✅ Registered git:readCompleteHistory handler');
 
+    // Register git-monitoring:status handler for compatibility with useGitMonitoring hook
+    ipcMain.handle('git-monitoring:status', async (event) => {
+      console.log('📡 Git IPC: Getting monitoring status');
+      
+      return {
+        isRunning: this.isInitialized,
+        watchedProjects: Array.from(this.watchedProjects),
+        activeWatchers: this.watchedProjects.size,
+        config: null
+      };
+    });
+    
+    console.log('✅ Registered git-monitoring:status handler');
+
     // Send test activity events for watched projects
     setInterval(() => {
       if (this.watchedProjects.size > 0 && mainWindow && !mainWindow.isDestroyed()) {
@@ -271,7 +285,8 @@ class SimpleGitMonitoring {
       'git:getRepoState',
       'git:connectRepoToProject',
       'git:readDirectGitState',
-      'git:readCompleteHistory'
+      'git:readCompleteHistory',
+      'git-monitoring:status'
     ]);
     console.log('📋 Integration points:');
     console.log('  - Watches Supabase project_watches table changes');
@@ -478,6 +493,7 @@ class SimpleGitMonitoring {
     ipcMain.removeHandler('git:connectRepoToProject');
     ipcMain.removeHandler('git:readDirectGitState');
     ipcMain.removeHandler('git:readCompleteHistory');
+    ipcMain.removeHandler('git-monitoring:status');
     
     this.watchedProjects.clear();
     this.isInitialized = false;

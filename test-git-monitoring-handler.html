@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Test Git Monitoring Handler</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      max-width: 800px;
+      margin: 50px auto;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+    .container {
+      background: white;
+      padding: 30px;
+      border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+    h1 {
+      color: #333;
+      border-bottom: 3px solid #4CAF50;
+      padding-bottom: 10px;
+    }
+    button {
+      background: #4CAF50;
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 16px;
+      margin: 10px 5px;
+    }
+    button:hover {
+      background: #45a049;
+    }
+    button:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+    }
+    .result {
+      margin-top: 20px;
+      padding: 15px;
+      border-radius: 4px;
+      background: #f0f0f0;
+      white-space: pre-wrap;
+      font-family: 'Courier New', monospace;
+      font-size: 14px;
+    }
+    .success {
+      background: #d4edda;
+      border: 1px solid #c3e6cb;
+      color: #155724;
+    }
+    .error {
+      background: #f8d7da;
+      border: 1px solid #f5c6cb;
+      color: #721c24;
+    }
+    .info {
+      background: #d1ecf1;
+      border: 1px solid #bee5eb;
+      color: #0c5460;
+    }
+    .warning {
+      background: #fff3cd;
+      border: 1px solid #ffeeba;
+      color: #856404;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🔧 Git Monitoring Handler Test</h1>
+    
+    <div>
+      <p><strong>Purpose:</strong> Test if the <code>git-monitoring:status</code> IPC handler is registered correctly.</p>
+      <p><strong>Note:</strong> This test only works in the Electron environment.</p>
+    </div>
+
+    <div style="margin-top: 20px;">
+      <button id="testBtn" onclick="testGitMonitoringStatus()">Test git-monitoring:status</button>
+      <button onclick="testAllHandlers()">Test All Git Handlers</button>
+      <button onclick="clearResults()">Clear Results</button>
+    </div>
+
+    <div id="results"></div>
+  </div>
+
+  <script>
+    function addResult(message, type = 'info') {
+      const resultsDiv = document.getElementById('results');
+      const resultEl = document.createElement('div');
+      resultEl.className = `result ${type}`;
+      resultEl.textContent = message;
+      resultsDiv.appendChild(resultEl);
+    }
+
+    function clearResults() {
+      document.getElementById('results').innerHTML = '';
+    }
+
+    async function testGitMonitoringStatus() {
+      clearResults();
+      addResult('🔍 Testing git-monitoring:status handler...', 'info');
+
+      // Check if we're in Electron
+      if (!window.electronAPI) {
+        addResult('❌ ERROR: Not running in Electron environment.\nPlease run this in the built Electron app.', 'error');
+        return;
+      }
+
+      try {
+        addResult('📡 Calling window.electronAPI.invoke("git-monitoring:status")...', 'info');
+        
+        const status = await window.electronAPI.invoke('git-monitoring:status');
+        
+        addResult('✅ SUCCESS! Handler responded correctly.\n\nResponse:\n' + JSON.stringify(status, null, 2), 'success');
+        
+        // Analyze the response
+        if (status.isRunning !== undefined) {
+          addResult(`📊 Git Monitoring Running: ${status.isRunning}`, 'info');
+        }
+        if (status.watchedProjects) {
+          addResult(`👀 Watched Projects: ${status.watchedProjects.length} (${status.watchedProjects.join(', ') || 'none'})`, 'info');
+        }
+        if (status.activeWatchers !== undefined) {
+          addResult(`🔄 Active Watchers: ${status.activeWatchers}`, 'info');
+        }
+        
+      } catch (error) {
+        addResult(`❌ ERROR: ${error.message}\n\nStack:\n${error.stack}`, 'error');
+        addResult('⚠️ This error means the handler is NOT registered correctly.', 'warning');
+      }
+    }
+
+    async function testAllHandlers() {
+      clearResults();
+      addResult('🧪 Testing all Git IPC handlers...', 'info');
+
+      // Check if we're in Electron
+      if (!window.electronAPI) {
+        addResult('❌ ERROR: Not running in Electron environment.', 'error');
+        return;
+      }
+
+      const handlers = [
+        { name: 'git-monitoring:status', call: () => window.electronAPI.invoke('git-monitoring:status') },
+        { name: 'git:watchProject', call: () => window.electronAPI.git?.watchProject?.('test-project', true) },
+        { name: 'git:listProjectRepos', call: () => window.electronAPI.git?.listProjectRepos?.('test-project') },
+      ];
+
+      for (const handler of handlers) {
+        try {
+          addResult(`\n📡 Testing ${handler.name}...`, 'info');
+          const result = await handler.call();
+          addResult(`✅ ${handler.name} - SUCCESS\nResponse: ${JSON.stringify(result, null, 2)}`, 'success');
+        } catch (error) {
+          addResult(`❌ ${handler.name} - FAILED\nError: ${error.message}`, 'error');
+        }
+      }
+
+      addResult('\n🏁 All handler tests completed!', 'info');
+    }
+
+    // Auto-run test on page load if in Electron
+    window.addEventListener('DOMContentLoaded', () => {
+      if (window.electronAPI) {
+        addResult('✅ Running in Electron environment', 'success');
+        addResult('Click "Test git-monitoring:status" to verify the fix.', 'info');
+      } else {
+        addResult('⚠️ Not running in Electron environment.\nThis page must be opened in the Electron app to test the handlers.', 'warning');
+      }
+    });
+  </script>
+</body>
+</html>
+
