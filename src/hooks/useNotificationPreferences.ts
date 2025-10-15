@@ -71,6 +71,16 @@ export function useNotificationPreferences() {
       if (updateError) throw updateError
 
       setPreferences(updatedPreferences)
+
+      // Update Electron notification service if available
+      if (typeof window !== 'undefined' && (window as any).electronAPI) {
+        try {
+          await (window as any).electronAPI.invoke('notifications:updatePreferences', user.id, updatedPreferences)
+        } catch (electronError) {
+          console.warn('Failed to update Electron notification preferences:', electronError)
+          // Don't fail the whole operation if Electron update fails
+        }
+      }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to update preferences'
       setError(errorMessage)
