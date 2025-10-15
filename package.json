@@ -10,6 +10,7 @@
     "next:export": "next export",
     "electron:dev": "cross-env NODE_ENV=development electron .",
     "build": "next build",
+    "prebuild": "node scripts/fix-sharp.js",
     "icons:generate": "node scripts/generate-icons-from-colabify.js",
     "icons:platform": "node scripts/generate-platform-icons.js",
     "icons:all": "npm run icons:generate && npm run icons:platform",
@@ -28,19 +29,34 @@
     "dist:win": "npm run build && electron-builder --win",
     "publish:win": "npm run build && electron-builder --win --publish always"
   },
-  "build": {
-    "appId": "xyz.colabify.app",
-    "productName": "Colabify",
-    "directories": {
-      "output": "dist-electron"
+"build": {
+  "appId": "xyz.colabify.app",
+  "productName": "Colabify",
+  "directories": {
+    "output": "dist-electron"
+  },
+  "files": [
+    "electron/**/*",
+    "out/**/*",
+    "build/**/*",
+    "public/**/*",
+    "node_modules/**/*",
+    "package.json",
+    "!node_modules/@img/**",
+    "!**/@img/sharp-darwin-arm64/**",
+    "!**/@img/sharp-darwin-x64/**",
+    "!**/@img/sharp-linux-arm64/**",
+    "!**/@img/sharp-linux-x64/**",
+    "!**/@img/sharp-linux-arm64v8/**"
+  ],
+  "asarUnpack": [
+    "node_modules/keytar/**/*"
+  ],
+    "npmRebuild": true,
+    "extraMetadata": {
+      "description": "GitHub collaboration visualizer",
+      "author": "Colabify.xyz"
     },
-    "files": [
-      "electron/**/*",
-      "out/**/*",
-      "build/**/*",
-      "public/**/*",
-      "package.json"
-    ],
     "mac": {
       "category": "public.app-category.developer-tools",
       "icon": "build/icon.icns",

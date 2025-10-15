@@ -73,7 +73,7 @@ export function UpdateNotification() {
 
     // Cleanup listeners on unmount
     return () => {
-      window.electronAPI.removeUpdateListeners?.();
+      window.electronAPI?.removeUpdateListeners?.();
     };
   }, []);
 

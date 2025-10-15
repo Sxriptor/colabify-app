@@ -39,9 +39,10 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
-
+nul
 # electron
 dist/
+dist-electron/
 *.app
 *.dmg
 *.exe
@@ -50,3 +51,11 @@ dist/
 *.rpm
 *.zip
 *.tar.gz
+*.blockmap
+*.yml
+!electron-builder.yml
+
+# electron-builder
+release/
+.electron-builder.yaml
+builder-effective-config.yaml

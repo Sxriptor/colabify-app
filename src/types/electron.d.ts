@@ -18,6 +18,12 @@ declare global {
       invoke: (channel: string, ...args: any[]) => Promise<any>;
       platform: string;
       isElectron: boolean;
+      // Auto-updater API
+      checkForUpdates: () => Promise<{ success: boolean; error?: string }>;
+      downloadUpdate: () => Promise<{ success: boolean; error?: string }>;
+      quitAndInstall: () => Promise<{ success: boolean; error?: string }>;
+      onUpdateEvent: (callback: (event: string, data: any) => void) => void;
+      removeUpdateListeners: () => void;
     };
   }
 }
