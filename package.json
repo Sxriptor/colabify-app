@@ -1,6 +1,6 @@
 {
-  "name": "devpulse",
-  "version": "0.1.0",
+  "name": "Colabify",
+  "version": "1.0.0",
   "private": true,
   "main": "electron/main.js",
   "scripts": {

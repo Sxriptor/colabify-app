@@ -7,7 +7,7 @@ class AuthManager {
   constructor() {
     this.callbackServer = null;
     this.authPromise = null;
-    this.serviceName = 'DevPulse';
+    this.serviceName = 'Colabify';
     this.accountName = 'auth-token';
     this.githubAccountName = 'github-token'; // OAuth token from GitHub
     this.userPATAccountName = 'user-github-pat'; // User-provided Personal Access Token
