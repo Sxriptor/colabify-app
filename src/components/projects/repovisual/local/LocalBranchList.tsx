@@ -2,10 +2,11 @@ import { GitHubBranch } from '../types'
 
 interface LocalBranchListProps {
   activeRepo: GitHubBranch
+  branches?: GitHubBranch[]
 }
 
-export function LocalBranchList({ activeRepo }: LocalBranchListProps) {
-  const localBranches = activeRepo?.localBranches || [activeRepo?.branch || 'main']
+export function LocalBranchList({ activeRepo, branches }: LocalBranchListProps) {
+  const localBranches = branches?.map(b => b.name) || activeRepo?.localBranches || [activeRepo?.branch || 'main']
 
   return (
     <div className="border border-gray-800">
