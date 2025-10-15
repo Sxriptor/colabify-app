@@ -19,7 +19,7 @@ export function useRepositoryData(isOpen: boolean, project: any, activeTab?: str
     isRefreshing
   } = useUnifiedGitData({
     projectId: project?.id,
-    autoRefresh: isOpen, // Only auto-refresh when modal is open
+    autoRefresh: isOpen && activeTab === 'local', // Only auto-refresh when modal is open and on local tab
     refreshIntervalMs: 5000
   })
 
@@ -27,6 +27,11 @@ export function useRepositoryData(isOpen: boolean, project: any, activeTab?: str
   const [dataSource, setDataSource] = useState<DataSource>('mock')
   const [githubConnected, setGithubConnected] = useState<boolean>(false)
   const [githubDataSource, setGithubDataSource] = useState<GitHubDataSource>('disconnected')
+
+  // Remote data state
+  const [remoteBranches, setRemoteBranches] = useState<GitHubBranch[]>([])
+  const [remoteCommits, setRemoteCommits] = useState<GitHubCommit[]>([])
+  const [remoteLoading, setRemoteLoading] = useState(false)
 
   // Transform unified data to match expected GitHubBranch type
   const branches = useMemo<GitHubBranch[]>(() => {
@@ -104,30 +109,155 @@ export function useRepositoryData(isOpen: boolean, project: any, activeTab?: str
     }
   }, [unifiedBranches, usingCache])
 
-  // Check GitHub connection when switching to remote tab
+  // Fetch remote data from GitHub API when switching to remote tab
   useEffect(() => {
     if (!isOpen || activeTab !== 'remote') return
 
-    const checkGitHubConnection = async () => {
-      if (typeof window !== 'undefined' && (window as any).electronAPI) {
-        try {
-          const hasToken = await (window as any).electronAPI.hasGitHubToken()
-          setGithubConnected(hasToken)
-          console.log('🔍 GitHub connection status:', hasToken ? 'Connected' : 'Disconnected')
-        } catch (error) {
-          console.log('⚠️ Could not check GitHub connection:', error)
-          setGithubConnected(false)
+    const fetchRemoteData = async () => {
+      // Get repository URL from project
+      const repoUrl = project?.repositories?.[0]?.url
+      if (!repoUrl) {
+        console.log('⚠️ No repository URL found')
+        setError('No repository URL configured')
+        return
+      }
+
+      // Parse owner and repo from URL
+      // Supports: https://github.com/owner/repo or https://github.com/owner/repo.git
+      let owner = ''
+      let repo = ''
+      try {
+        const urlParts = repoUrl
+          .replace('https://github.com/', '')
+          .replace('http://github.com/', '')
+          .replace('.git', '')
+          .split('/')
+
+        if (urlParts.length >= 2) {
+          owner = urlParts[0]
+          repo = urlParts[1]
+        } else {
+          throw new Error('Invalid GitHub URL format')
         }
+      } catch (parseError) {
+        console.error('❌ Failed to parse repository URL:', repoUrl)
+        setError('Invalid repository URL format')
+        return
+      }
+
+      console.log(`🌐 Fetching remote data for ${owner}/${repo}`)
+      setRemoteLoading(true)
+      setError(null)
+
+      try {
+        const electronAPI = (window as any).electronAPI
+        let githubToken = null
+
+        // Get GitHub token
+        if (electronAPI && electronAPI.getGitHubToken) {
+          try {
+            githubToken = await electronAPI.getGitHubToken()
+            console.log('🔑 GitHub token available:', !!githubToken)
+            setGithubConnected(!!githubToken)
+          } catch (tokenError) {
+            console.log('⚠️ Could not get GitHub token:', tokenError)
+            setGithubConnected(false)
+          }
+        }
+
+        const headers: HeadersInit = {
+          'Accept': 'application/vnd.github.v3+json'
+        }
+
+        if (githubToken) {
+          headers['Authorization'] = `Bearer ${githubToken}`
+          console.log('🔐 Using authenticated GitHub API request')
+        } else {
+          console.log('📖 Using unauthenticated GitHub API request (rate limited)')
+        }
+
+        // Fetch branches
+        const branchesResponse = await fetch(`https://api.github.com/repos/${owner}/${repo}/branches`, { headers })
+
+        if (!branchesResponse.ok) {
+          setGithubDataSource('disconnected')
+          if (branchesResponse.status === 401) {
+            throw new Error('GitHub token invalid or expired. Please sign in again.')
+          } else if (branchesResponse.status === 403) {
+            throw new Error('GitHub API rate limit exceeded. Please sign in to increase limits.')
+          } else if (branchesResponse.status === 404) {
+            throw new Error(`Repository ${owner}/${repo} not found or not accessible.`)
+          } else {
+            throw new Error(`GitHub API error: ${branchesResponse.status} ${branchesResponse.statusText}`)
+          }
+        }
+
+        const branchesData = await branchesResponse.json()
+        setGithubDataSource('connected')
+
+        // Transform branch data
+        const formattedBranches: GitHubBranch[] = branchesData.map((branch: any) => ({
+          name: branch.name,
+          commit: {
+            sha: branch.commit.sha,
+            author: {
+              login: branch.commit.author?.login || branch.commit.commit?.author?.name || 'Unknown',
+              avatar_url: branch.commit.author?.avatar_url || ''
+            },
+            commit: {
+              author: {
+                name: branch.commit.commit?.author?.name || 'Unknown',
+                date: branch.commit.commit?.author?.date || new Date().toISOString()
+              },
+              message: branch.commit.commit?.message || 'No commit message'
+            }
+          },
+          protected: branch.protected || false
+        }))
+
+        setRemoteBranches(formattedBranches)
+
+        // Fetch commits
+        const commitsResponse = await fetch(`https://api.github.com/repos/${owner}/${repo}/commits?per_page=50`, { headers })
+
+        if (commitsResponse.ok) {
+          const commitsData = await commitsResponse.json()
+
+          // Transform commit data
+          const formattedCommits: GitHubCommit[] = commitsData.map((commit: any) => ({
+            sha: commit.sha,
+            commit: {
+              author: commit.commit.author,
+              message: commit.commit.message
+            },
+            author: commit.author,
+            stats: {
+              additions: 0,
+              deletions: 0
+            }
+          }))
+
+          setRemoteCommits(formattedCommits)
+        }
+
+        console.log('✅ Remote data fetched successfully')
+        setDataSource('github')
+      } catch (error) {
+        console.error('❌ Error fetching remote data:', error)
+        setError(error instanceof Error ? error.message : 'Failed to fetch remote data')
+        setGithubDataSource('disconnected')
+      } finally {
+        setRemoteLoading(false)
       }
     }
 
-    checkGitHubConnection()
-  }, [isOpen, activeTab])
+    fetchRemoteData()
+  }, [isOpen, activeTab, project])
 
   return {
-    loading: unifiedLoading,
-    branches,
-    commits,
+    loading: activeTab === 'remote' ? remoteLoading : unifiedLoading,
+    branches: activeTab === 'remote' ? remoteBranches : branches,
+    commits: activeTab === 'remote' ? remoteCommits : commits,
     localUsers,
     error,
     dataSource,
