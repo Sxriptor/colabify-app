@@ -13,12 +13,18 @@ DECLARE
   actor_name TEXT;
   existing_notification_count INTEGER;
 BEGIN
-  -- Only process INSERT, not UPDATE (prevents duplicates)
+  -- For UPDATE operations, only notify if meaningful data changed
   IF TG_OP = 'UPDATE' THEN
-    RETURN NEW;
+    -- Skip if commit_hash, branch_name, and activity_data haven't changed
+    IF OLD.commit_hash = NEW.commit_hash AND
+       OLD.branch_name = NEW.branch_name AND
+       OLD.activity_data = NEW.activity_data THEN
+      RAISE LOG 'Skipping notification - no meaningful changes in activity: %', NEW.id;
+      RETURN NEW;
+    END IF;
   END IF;
 
-  RAISE LOG 'notify_team_on_live_activity triggered for activity_id: %, user_id: %, project_id: %', NEW.id, NEW.user_id, NEW.project_id;
+  RAISE LOG 'notify_team_on_live_activity triggered for activity_id: %, operation: %, user_id: %, project_id: %', NEW.id, TG_OP, NEW.user_id, NEW.project_id;
 
   -- Extract commit message and actor info
   commit_message := NEW.activity_data->>'message';
@@ -40,18 +46,6 @@ BEGIN
       AND u.id != NEW.user_id  -- Don't notify the person who made the commit
   LOOP
     RAISE LOG 'Found team member: %, preferences: %', team_member.id, team_member.notification_preferences;
-
-    -- Check if notification already exists for this activity + user combination
-    SELECT COUNT(*) INTO existing_notification_count
-    FROM notifications
-    WHERE user_id = team_member.id
-      AND type = 'team_activity'
-      AND data->>'activity_id' = NEW.id::text;
-
-    IF existing_notification_count > 0 THEN
-      RAISE LOG 'Notification already exists for activity: % and user: %, skipping', NEW.id, team_member.id;
-      CONTINUE;
-    END IF;
 
     -- Check if user has notifications enabled
     IF team_member.notification_preferences IS NULL OR
@@ -144,7 +138,7 @@ $$ LANGUAGE plpgsql;
 DROP TRIGGER IF EXISTS trigger_notify_team_on_live_activity ON live_activities;
 
 CREATE TRIGGER trigger_notify_team_on_live_activity
-  AFTER INSERT
+  AFTER INSERT OR UPDATE
   ON live_activities
   FOR EACH ROW
   EXECUTE FUNCTION notify_team_on_live_activity();
