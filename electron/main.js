@@ -18,6 +18,10 @@ const fetch = globalThis.fetch;
 // Initialize AuthManager
 const authManager = new AuthManager();
 
+// Initialize Auto-updater Service
+const AutoUpdaterService = require('./services/AutoUpdaterService');
+const autoUpdaterService = new AutoUpdaterService();
+
 let mainWindow;
 
 // Register IPC handlers early
@@ -119,9 +123,12 @@ function createWindow() {
   // Show window when ready to prevent visual flash
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
-    
+
     // Initialize Git monitoring backend after window is ready
     initializeGitMonitoring(mainWindow);
+
+    // Initialize auto-updater after window is ready
+    autoUpdaterService.initialize(mainWindow);
   });
 
   // Prevent navigation to external URLs (for OAuth flow)
@@ -369,6 +376,9 @@ ipcMain.handle('api:call', async (event, endpoint, options = {}) => {
 // Setup notification IPC handlers
 setupNotificationIPC();
 
+// Setup auto-updater IPC handlers
+setupAutoUpdaterIPC();
+
 console.log('✅ All IPC handlers registered');
 
 // Initialize Git monitoring backend
@@ -489,6 +499,49 @@ function setupNotificationIPC() {
   console.log('✅ Notification IPC handlers setup complete');
 }
 
+// Setup auto-updater IPC handlers
+function setupAutoUpdaterIPC() {
+  console.log('🔄 Setting up Auto-updater IPC handlers');
+
+  // Check for updates
+  ipcMain.handle('updater:check-for-updates', async () => {
+    try {
+      console.log('🔍 Checking for updates...');
+      await autoUpdaterService.checkForUpdates();
+      return { success: true };
+    } catch (error) {
+      console.error('Error checking for updates:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  // Download update
+  ipcMain.handle('updater:download-update', async () => {
+    try {
+      console.log('📥 Starting update download...');
+      await autoUpdaterService.downloadUpdate();
+      return { success: true };
+    } catch (error) {
+      console.error('Error downloading update:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  // Quit and install
+  ipcMain.handle('updater:quit-and-install', async () => {
+    try {
+      console.log('🔄 Quitting and installing update...');
+      autoUpdaterService.quitAndInstall();
+      return { success: true };
+    } catch (error) {
+      console.error('Error installing update:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  console.log('✅ Auto-updater IPC handlers setup complete');
+}
+
 // Function to initialize Git monitoring (called after window is ready)
 async function initializeGitMonitoring(mainWindow) {
   console.log('🚀 Starting Git monitoring initialization...');
@@ -603,21 +656,25 @@ app.on('window-all-closed', () => {
   }
 });
 
-// Cleanup Git monitoring backend and notification service on app quit
+// Cleanup Git monitoring backend, notification service, and auto-updater on app quit
 app.on('before-quit', async (event) => {
   let needsCleanup = false;
-  
+
   if (gitMonitoringBackend && gitMonitoringBackend.isInitialized()) {
     needsCleanup = true;
   }
-  
+
   if (notificationService) {
     needsCleanup = true;
   }
-  
+
+  if (autoUpdaterService) {
+    needsCleanup = true;
+  }
+
   if (needsCleanup) {
     event.preventDefault();
-    
+
     try {
       // Cleanup notification service
       if (notificationService) {
@@ -625,13 +682,19 @@ app.on('before-quit', async (event) => {
         notificationService.destroy();
         notificationService = null;
       }
-      
+
       // Cleanup Git monitoring
       if (gitMonitoringBackend && gitMonitoringBackend.isInitialized()) {
         console.log('🧹 Cleaning up Git monitoring backend...');
         await gitMonitoringBackend.cleanup();
       }
-      
+
+      // Cleanup auto-updater
+      if (autoUpdaterService) {
+        console.log('🔄 Cleaning up auto-updater...');
+        autoUpdaterService.cleanup();
+      }
+
       app.quit();
     } catch (error) {
       console.error('❌ Error during cleanup:', error);

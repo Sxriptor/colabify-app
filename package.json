@@ -23,7 +23,57 @@
     "db:reset": "tsx scripts/reset.ts",
     "test": "vitest --run",
     "test:watch": "vitest",
-    "test:ui": "vitest --ui"
+    "test:ui": "vitest --ui",
+    "dist": "npm run build && electron-builder",
+    "dist:win": "npm run build && electron-builder --win",
+    "publish:win": "npm run build && electron-builder --win --publish always"
+  },
+  "build": {
+    "appId": "xyz.colabify.app",
+    "productName": "Colabify",
+    "directories": {
+      "output": "dist-electron"
+    },
+    "files": [
+      "electron/**/*",
+      "out/**/*",
+      "build/**/*",
+      "public/**/*",
+      "package.json"
+    ],
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "icon": "build/icon.icns",
+      "target": [
+        "dmg",
+        "zip"
+      ]
+    },
+    "win": {
+      "icon": "build/icon.ico",
+      "target": [
+        "nsis"
+      ]
+    },
+    "linux": {
+      "icon": "build/icons",
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Development"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "sxriptor",
+      "repo": "electron-colabify"
+    }
   },
   "dependencies": {
     "@supabase/ssr": "^0.7.0",
@@ -33,6 +83,7 @@
     "chokidar": "^4.0.3",
     "d3": "^7.9.0",
     "dotenv": "^17.2.3",
+    "electron-updater": "^6.6.2",
     "http": "^0.0.1-security",
     "keytar": "^7.9.0",
     "next": "15.5.4",

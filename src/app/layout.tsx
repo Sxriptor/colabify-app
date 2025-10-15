@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/lib/auth/context";
 import { GlobalFloatingMenu } from "@/components/ui/GlobalFloatingMenu";
+import { UpdateNotification } from "@/components/ui/UpdateNotification";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -42,6 +43,7 @@ export default function RootLayout({
         <AuthProvider>
           {children}
           <GlobalFloatingMenu />
+          <UpdateNotification />
         </AuthProvider>
       </body>
     </html>
