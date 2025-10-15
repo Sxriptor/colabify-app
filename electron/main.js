@@ -62,12 +62,17 @@ console.log('✅ Early IPC handlers registered');
 // No protocol registration needed - using external browser with local callback server
 
 function createWindow() {
+  // Use .ico on Windows for better taskbar/window icon quality
+  const iconPath = process.platform === 'win32' 
+    ? path.join(__dirname, '../build/icon.ico')
+    : path.join(__dirname, '../public/icons/colabify.png');
+    
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
     minWidth: 800,
     minHeight: 600,
-    icon: path.join(__dirname, '../public/icons/colabify.png'), // Colabify icon for taskbar
+    icon: iconPath, // Platform-specific icon (Windows uses .ico for best quality)
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
