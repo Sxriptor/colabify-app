@@ -79,7 +79,8 @@
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
-      "createStartMenuShortcut": true
+      "createStartMenuShortcut": true,
+      "artifactName": "Colabify Setup.${ext}"
     },
     "publish": {
       "provider": "github",
