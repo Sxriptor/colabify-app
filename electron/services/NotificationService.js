@@ -63,9 +63,20 @@ class NotificationService {
             headers: {
               Authorization: `Bearer ${accessToken}`
             }
+          },
+          auth: {
+            persistSession: false,
+            autoRefreshToken: false
           }
         });
-        console.log('✅ Authenticated Supabase client created');
+        
+        // Set the session explicitly for real-time to work with RLS
+        await this.supabase.auth.setSession({
+          access_token: accessToken,
+          refresh_token: '' // Not needed for real-time subscriptions
+        });
+        
+        console.log('✅ Authenticated Supabase client created with session');
       } catch (error) {
         console.error('❌ Failed to create authenticated client:', error);
       }
@@ -81,9 +92,10 @@ class NotificationService {
     
     try {
       console.log('🔔 Setting up real-time subscription for notifications...');
+      console.log('🔔 Subscribing to notifications_log for user:', userId);
       
       this.subscription = this.supabase
-        .channel('notification-changes')
+        .channel(`notification-changes-${userId}`) // Unique channel per user
         .on(
           'postgres_changes',
           {
@@ -93,19 +105,31 @@ class NotificationService {
             filter: `user_id=eq.${userId}`
           },
           (payload) => {
-            console.log('🔔 New notification log received:', payload);
+            console.log('🔔 Real-time event received!');
+            console.log('🔔 Payload:', JSON.stringify(payload, null, 2));
             this.handleNewNotificationLog(payload.new);
           }
         )
-        .subscribe((status) => {
-          console.log('🔔 Subscription status:', status);
+        .subscribe((status, error) => {
+          console.log('🔔 Subscription status changed:', status);
+          if (error) {
+            console.error('❌ Subscription error:', error);
+          }
           if (status === 'SUBSCRIBED') {
-            console.log('✅ Real-time notifications active');
+            console.log('✅ Real-time notifications ACTIVE and listening for user:', userId);
+            console.log('✅ Waiting for INSERT events on notifications_log table...');
+          } else if (status === 'CHANNEL_ERROR') {
+            console.error('❌ Channel error - real-time subscription failed');
+          } else if (status === 'TIMED_OUT') {
+            console.error('❌ Subscription timed out');
+          } else if (status === 'CLOSED') {
+            console.log('🔔 Subscription closed');
           }
         });
 
     } catch (error) {
       console.error('❌ Failed to set up real-time subscription:', error);
+      console.error('❌ Error stack:', error.stack);
     }
   }
 
