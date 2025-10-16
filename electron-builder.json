@@ -8,11 +8,12 @@
     }
   ],
   "directories": {
-    "output": "dist",
+    "output": "dist-new",
     "buildResources": "build"
   },
   "files": [
-    ".next/**/*",
+    ".next/standalone/**/*",
+    ".next/static/**/*",
     "electron/**/*",
     "public/**/*",
     "package.json",

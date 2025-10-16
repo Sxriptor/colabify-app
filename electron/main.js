@@ -74,7 +74,7 @@ console.log('✅ Early IPC handlers registered');
 
 // No protocol registration needed - using external browser with local callback server
 
-function createWindow() {
+async function createWindow() {
   // Use platform-specific icons for best quality
   // Windows ALWAYS needs .ico for crisp taskbar/window icons (even in dev)
   // Mac uses .icns, Linux uses PNG
@@ -116,8 +116,103 @@ function createWindow() {
     backgroundColor: '#ffffff'
   });
 
-  // Load the Next.js app (always connect to server since we need API routes)
-  const url = 'http://localhost:3000';
+  // Load the Next.js app
+  let url;
+  if (isDev) {
+    // In development, connect to Next.js dev server
+    url = 'http://localhost:3000';
+  } else {
+    // In production, run the Next.js standalone server
+    const path = require('path');
+    const fs = require('fs');
+    const { spawn } = require('child_process');
+    
+    console.log('🚀 Starting Next.js standalone server...');
+    
+    // Path to the standalone server
+    const serverPath = path.join(__dirname, '../.next/standalone/server.js');
+    const standalonePath = path.join(__dirname, '../.next/standalone');
+    const staticPath = path.join(__dirname, '../.next/static');
+    
+    console.log('📁 Checking paths:');
+    console.log('  Server path:', serverPath);
+    console.log('  Server exists:', fs.existsSync(serverPath));
+    console.log('  Standalone path:', standalonePath);
+    console.log('  Standalone exists:', fs.existsSync(standalonePath));
+    console.log('  Static path:', staticPath);
+    console.log('  Static exists:', fs.existsSync(staticPath));
+    
+    if (!fs.existsSync(serverPath)) {
+      console.error('❌ Next.js server not found at:', serverPath);
+      console.error('❌ Available files in .next:', fs.existsSync(path.join(__dirname, '../.next')) ? fs.readdirSync(path.join(__dirname, '../.next')) : 'No .next folder');
+      
+      // Fallback: try to load a simple error page
+      url = `data:text/html,<html><body><h1>Error: Next.js server not found</h1><p>Please rebuild the application with: npm run build</p></body></html>`;
+    } else {
+      try {
+        // Copy static folder to standalone if needed
+        const standaloneStaticPath = path.join(standalonePath, '.next/static');
+        if (!fs.existsSync(standaloneStaticPath) && fs.existsSync(staticPath)) {
+          console.log('📦 Copying static files to standalone folder...');
+          const standaloneNextPath = path.join(standalonePath, '.next');
+          if (!fs.existsSync(standaloneNextPath)) {
+            fs.mkdirSync(standaloneNextPath, { recursive: true });
+          }
+          fs.cpSync(staticPath, standaloneStaticPath, { recursive: true });
+          console.log('✅ Static files copied');
+        }
+        
+        // Copy public folder to standalone if needed
+        const publicPath = path.join(__dirname, '../public');
+        const standalonePublicPath = path.join(standalonePath, 'public');
+        if (!fs.existsSync(standalonePublicPath) && fs.existsSync(publicPath)) {
+          console.log('📦 Copying public files to standalone folder...');
+          fs.cpSync(publicPath, standalonePublicPath, { recursive: true });
+          console.log('✅ Public files copied');
+        }
+        
+        // Start the Next.js server as a child process
+        const nextServer = spawn('node', [serverPath], {
+          cwd: standalonePath,
+          env: {
+            ...process.env,
+            PORT: '3000',
+            HOSTNAME: 'localhost',
+          },
+          stdio: ['ignore', 'pipe', 'pipe']
+        });
+        
+        nextServer.stdout.on('data', (data) => {
+          console.log('Next.js:', data.toString().trim());
+        });
+        
+        nextServer.stderr.on('data', (data) => {
+          console.error('Next.js Error:', data.toString().trim());
+        });
+        
+        nextServer.on('error', (error) => {
+          console.error('❌ Failed to start Next.js server:', error);
+        });
+        
+        nextServer.on('exit', (code, signal) => {
+          console.log(`Next.js server exited with code ${code} and signal ${signal}`);
+        });
+        
+        // Store the server process so we can kill it on app quit
+        global.nextServerProcess = nextServer;
+        
+        // Give the server a moment to start
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
+        url = 'http://localhost:3000';
+        console.log('✅ Next.js standalone server started');
+      } catch (error) {
+        console.error('❌ Failed to start Next.js server:', error);
+        url = `data:text/html,<html><body><h1>Error: Failed to start server</h1><p>${error.message}</p></body></html>`;
+      }
+    }
+  }
+  
   mainWindow.loadURL(url);
 
   // Show window when ready to prevent visual flash
@@ -610,7 +705,7 @@ if (!gotTheLock) {
 }
 
 // App lifecycle events
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   // Set dock icon for macOS
   if (process.platform === 'darwin') {
     const dockIconPath = isDev 
@@ -641,11 +736,11 @@ app.whenReady().then(() => {
     }
   }
   
-  createWindow();
+  await createWindow();
 
-  app.on('activate', () => {
+  app.on('activate', async () => {
     if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow();
+      await createWindow();
     }
   });
 });
@@ -656,7 +751,7 @@ app.on('window-all-closed', () => {
   }
 });
 
-// Cleanup Git monitoring backend, notification service, and auto-updater on app quit
+// Cleanup Git monitoring backend, notification service, auto-updater, and Next.js server on app quit
 app.on('before-quit', async (event) => {
   let needsCleanup = false;
 
@@ -672,10 +767,21 @@ app.on('before-quit', async (event) => {
     needsCleanup = true;
   }
 
+  if (global.nextServerProcess) {
+    needsCleanup = true;
+  }
+
   if (needsCleanup) {
     event.preventDefault();
 
     try {
+      // Cleanup Next.js server
+      if (global.nextServerProcess) {
+        console.log('🛑 Stopping Next.js server...');
+        global.nextServerProcess.kill();
+        global.nextServerProcess = null;
+      }
+
       // Cleanup notification service
       if (notificationService) {
         console.log('🔔 Cleaning up notification service...');

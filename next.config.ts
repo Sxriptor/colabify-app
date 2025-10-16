@@ -7,6 +7,8 @@ const nextConfig: NextConfig = {
   },
   // Disable trailing slash for Electron compatibility
   trailingSlash: true,
+  // Enable standalone output for Electron packaging
+  output: 'standalone',
 };
 
 export default nextConfig;

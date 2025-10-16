@@ -36,23 +36,19 @@
     "output": "dist-electron"
   },
   "files": [
+    ".next/standalone/**/*",
+    ".next/static/**/*",
     "electron/**/*",
-    "out/**/*",
     "build/**/*",
     "public/**/*",
-    "node_modules/**/*",
     "package.json",
     "!node_modules/@img/**",
-    "!**/@img/sharp-darwin-arm64/**",
-    "!**/@img/sharp-darwin-x64/**",
-    "!**/@img/sharp-linux-arm64/**",
-    "!**/@img/sharp-linux-x64/**",
-    "!**/@img/sharp-linux-arm64v8/**"
+    "!node_modules/@emnapi/**"
   ],
-  "asarUnpack": [
-    "node_modules/keytar/**/*"
-  ],
-    "npmRebuild": true,
+  "asar": false,
+  "npmRebuild": true,
+    "nodeGypRebuild": false,
+    "buildDependenciesFromSource": false,
     "extraMetadata": {
       "description": "GitHub collaboration visualizer",
       "author": "Colabify.xyz"
