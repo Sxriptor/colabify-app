@@ -26,6 +26,8 @@ export interface GitCommit {
     deletions: number
     files: number
   }
+  repository?: string
+  localPath?: string
 }
 
 export interface GitBranch {
@@ -272,9 +274,14 @@ class GitDataManagerService {
             fromCache: true
           })
 
-          // Add commits
+          // Add commits with repository and local path tags
           if (cachedData.commits) {
-            allCommits.push(...cachedData.commits)
+            const taggedCommits = cachedData.commits.map((commit: any) => ({
+              ...commit,
+              repository: repo.name,
+              localPath: mapping.local_path
+            }))
+            allCommits.push(...taggedCommits)
           }
 
           // Add users from contributors
@@ -442,60 +449,62 @@ class GitDataManagerService {
             const cacheStale = cacheAge > 60 * 60 * 1000 // 1 hour
             const hasUncommittedChanges = uncommittedChanges.length > 0
 
-            // Only run full git scan if cache is stale or there are new uncommitted changes
-            if (cacheStale || hasUncommittedChanges) {
-              console.log(`🔄 [GitDataManager] Refreshing ${repo.name} (stale: ${cacheStale}, changes: ${hasUncommittedChanges})`)
+            // Use cached data if available and not stale
+            if (mapping.git_data_cache && mapping.git_data_cache.commits && !cacheStale) {
+              console.log(`✅ [GitDataManager] ${repo.name} cache is fresh, using cached data`)
+              const cachedData = mapping.git_data_cache
 
-              // Trigger background cache refresh via GitCacheRefreshService
-              await gitCacheRefreshService.refreshProjectRepositories(projectId, {
-                forceRefresh: true,
-                maxCommits: 2000
+              allBranches.push({
+                name: repo.name,
+                path: mapping.local_path,
+                branch: gitState.branch || 'main',
+                head: gitState.head || cachedData.commits[0]?.sha,
+                dirty: gitState.dirty || hasUncommittedChanges,
+                ahead: gitState.ahead || 0,
+                behind: gitState.behind || 0,
+                localBranches: cachedData.branches?.filter((b: any) => b.isLocal).map((b: any) => b.name) || [],
+                remoteBranches: cachedData.branches?.filter((b: any) => b.isRemote).map((b: any) => b.name) || [],
+                remoteUrls: cachedData.remotes || {},
+                lastChecked: mapping.git_data_last_updated,
+                history: cachedData,
+                fromCache: true
               })
 
-              // Reload from cache after refresh
-              await this.loadFromDatabaseCache(projectId, userId)
-              return // Exit early since we've reloaded
-            } else {
-              console.log(`✅ [GitDataManager] ${repo.name} cache is fresh, using cached data`)
+              if (cachedData.commits) {
+                // Tag commits with the repository and local path
+                const taggedCommits = cachedData.commits.map((commit: any) => ({
+                  ...commit,
+                  repository: repo.name,
+                  localPath: mapping.local_path
+                }))
+                allCommits.push(...taggedCommits)
+              }
 
-              // Use cached data if available
-              if (mapping.git_data_cache && mapping.git_data_cache.commits) {
-                const cachedData = mapping.git_data_cache
-
-                allBranches.push({
-                  name: repo.name,
-                  path: mapping.local_path,
-                  branch: gitState.branch || 'main',
-                  head: gitState.head || cachedData.commits[0]?.sha,
-                  dirty: gitState.dirty || hasUncommittedChanges,
-                  ahead: gitState.ahead || 0,
-                  behind: gitState.behind || 0,
-                  localBranches: cachedData.branches?.filter((b: any) => b.isLocal).map((b: any) => b.name) || [],
-                  remoteBranches: cachedData.branches?.filter((b: any) => b.isRemote).map((b: any) => b.name) || [],
-                  remoteUrls: cachedData.remotes || {},
-                  lastChecked: mapping.git_data_last_updated,
-                  history: cachedData,
-                  fromCache: true
-                })
-
-                if (cachedData.commits) {
-                  allCommits.push(...cachedData.commits)
-                }
-
-                if (cachedData.summary?.contributors) {
-                  for (const contributor of cachedData.summary.contributors) {
-                    allUsers.push({
-                      userId: contributor.email || contributor.name,
-                      userName: contributor.name,
-                      userEmail: contributor.email,
-                      localPath: mapping.local_path,
-                      currentBranch: gitState.branch || 'main',
-                      status: 'active',
-                      commitsToday: 0
-                    })
-                  }
+              if (cachedData.summary?.contributors) {
+                for (const contributor of cachedData.summary.contributors) {
+                  allUsers.push({
+                    userId: contributor.email || contributor.name,
+                    userName: contributor.name,
+                    userEmail: contributor.email,
+                    localPath: mapping.local_path,
+                    currentBranch: gitState.branch || 'main',
+                    status: 'active',
+                    commitsToday: 0
+                  })
                 }
               }
+            } else {
+              // Cache is stale or missing - trigger refresh but continue processing other repos
+              console.log(`🔄 [GitDataManager] ${repo.name} cache needs refresh (stale: ${cacheStale}, changes: ${hasUncommittedChanges})`)
+
+              // Schedule async refresh for this specific mapping
+              // Don't await it - let it happen in the background
+              gitCacheRefreshService.refreshProjectRepositories(projectId, {
+                forceRefresh: true,
+                maxCommits: 2000
+              }).catch(error => {
+                console.error(`❌ [GitDataManager] Background refresh failed for ${repo.name}:`, error)
+              })
             }
           } catch (error) {
             console.error(`❌ [GitDataManager] Error refreshing ${mapping.local_path}:`, error)

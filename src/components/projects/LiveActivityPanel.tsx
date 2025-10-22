@@ -17,18 +17,6 @@ interface LiveActivity {
   userName?: string
 }
 
-interface TeamMember {
-  userId: string
-  userName: string
-  status: string
-  currentBranch?: string
-  currentFile?: string
-  lastCommitMessage?: string
-  workingOn?: string
-  lastSeen: Date
-  isOnline: boolean
-}
-
 interface LiveActivityPanelProps {
   project: any
 }
@@ -62,30 +50,40 @@ export function LiveActivityPanel({ project }: LiveActivityPanelProps) {
   const isWatchingInBackend = isElectronFromHook ? status.watchedProjects.includes(project.id) : false
   const isWatching = isWatchingInDatabase || isWatchingInBackend
 
-  // Transform unified data into LiveActivity format
-  const activities = useMemo<LiveActivity[]>(() => {
-    const result: LiveActivity[] = []
+  // Group commits by user with their recent activities
+  const userActivities = useMemo(() => {
+    const userMap = new Map<string, {
+      userId: string
+      userName: string
+      userEmail: string
+      activities: LiveActivity[]
+      lastActivity: Date
+      isOnline: boolean
+      currentBranch?: string
+    }>()
 
-    // Get user info from branches (which includes user data)
-    const userMap = new Map()
-    branches.forEach(branch => {
-      if (branch.user) {
-        userMap.set(branch.path, branch.user)
-      }
-    })
-
-    // Transform commits into activities
-    commits.slice(0, 20).forEach((commit, index) => {
-      // Try to find user from branches or users array
-      const branchForCommit = branches.find(b =>
-        commit.branch === b.branch ||
-        b.history?.commits?.some((c: any) => c.sha === commit.sha)
-      )
-
+    // Process all commits and group by user
+    commits.forEach((commit, index) => {
       const userName = commit.author.name || commit.author.email
-      const userId = commit.author.email || `user-${index}`
+      const userEmail = commit.author.email || `user-${index}@unknown`
+      const userId = userEmail
 
-      result.push({
+      if (!userMap.has(userId)) {
+        userMap.set(userId, {
+          userId,
+          userName,
+          userEmail,
+          activities: [],
+          lastActivity: new Date(commit.date),
+          isOnline: true,
+          currentBranch: commit.branch
+        })
+      }
+
+      const user = userMap.get(userId)!
+
+      // Add activity
+      user.activities.push({
         id: commit.sha,
         userId,
         userName,
@@ -95,64 +93,27 @@ export function LiveActivityPanel({ project }: LiveActivityPanelProps) {
         commitHash: commit.sha,
         occurredAt: new Date(commit.date)
       })
+
+      // Update last activity if this is more recent
+      const commitDate = new Date(commit.date)
+      if (commitDate > user.lastActivity) {
+        user.lastActivity = commitDate
+        user.currentBranch = commit.branch
+      }
     })
 
-    return result.sort((a, b) => b.occurredAt.getTime() - a.occurredAt.getTime())
+    // Sort activities within each user by date (most recent first)
+    userMap.forEach(user => {
+      user.activities.sort((a, b) => b.occurredAt.getTime() - a.occurredAt.getTime())
+      // Limit to 10 most recent activities per user
+      user.activities = user.activities.slice(0, 10)
+    })
+
+    // Convert to array and sort by most recent activity
+    return Array.from(userMap.values())
+      .sort((a, b) => b.lastActivity.getTime() - a.lastActivity.getTime())
   }, [commits, branches])
 
-  // Transform unified data into TeamMember format
-  const teamMembers = useMemo<TeamMember[]>(() => {
-    const memberMap = new Map<string, TeamMember>()
-
-    // Create team members from branches (one per user)
-    branches.forEach(branch => {
-      if (!branch.user) return
-
-      const userId = branch.user.id || branch.user.email
-      const userName = branch.user.name || branch.user.email
-
-      // Get most recent commit for this branch
-      const branchCommits = commits.filter(c => c.branch === branch.branch)
-      const lastCommit = branchCommits[0]
-
-      if (!memberMap.has(userId)) {
-        memberMap.set(userId, {
-          userId,
-          userName,
-          status: 'active',
-          currentBranch: branch.branch,
-          currentFile: undefined,
-          lastCommitMessage: lastCommit?.message,
-          workingOn: lastCommit?.message || `Working on ${branch.branch}`,
-          lastSeen: lastCommit ? new Date(lastCommit.date) : new Date(),
-          isOnline: true
-        })
-      }
-    })
-
-    // Also add users from the users array
-    users.forEach(u => {
-      if (!memberMap.has(u.userId)) {
-        const userCommits = commits.filter(c => c.author.email === u.userEmail)
-        const lastCommit = userCommits[0]
-
-        memberMap.set(u.userId, {
-          userId: u.userId,
-          userName: u.userName,
-          status: u.status,
-          currentBranch: u.currentBranch,
-          currentFile: undefined,
-          lastCommitMessage: lastCommit?.message,
-          workingOn: lastCommit?.message || `Working on ${u.currentBranch}`,
-          lastSeen: lastCommit ? new Date(lastCommit.date) : new Date(),
-          isOnline: u.status === 'active'
-        })
-      }
-    })
-
-    return Array.from(memberMap.values())
-      .sort((a, b) => b.lastSeen.getTime() - a.lastSeen.getTime())
-  }, [branches, users, commits])
 
   // Format time ago
   const formatTimeAgo = (date: Date) => {
@@ -195,7 +156,7 @@ export function LiveActivityPanel({ project }: LiveActivityPanelProps) {
     )
   }
 
-  if (gitLoading && activities.length === 0) {
+  if (gitLoading && userActivities.length === 0) {
     return (
       <div className="p-6">
         <div className="flex items-center justify-center py-8">
@@ -227,42 +188,10 @@ export function LiveActivityPanel({ project }: LiveActivityPanelProps) {
           </div>
         </div>
 
-        {/* Team Members Section */}
-        {teamMembers.length > 0 && (
-          <div className="mb-6">
-            <h3 className="text-sm font-medium text-gray-900 mb-3">Team Activity</h3>
-            <div className="space-y-3">
-              {teamMembers.map((member) => (
-                <div key={member.userId} className="flex items-start space-x-3 p-3 bg-gray-50 rounded-lg">
-                  <div className="flex-shrink-0">
-                    <div className={`w-2 h-2 rounded-full mt-2 ${member.isOnline ? 'bg-green-500' : 'bg-gray-300'}`}></div>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between">
-                      <div className="text-sm font-medium text-gray-900">{member.userName}</div>
-                      <div className="text-xs text-gray-500">{formatTimeAgo(member.lastSeen)}</div>
-                    </div>
-                    {member.currentBranch && (
-                      <div className="text-xs text-blue-600 mt-1">
-                        🔀 {member.currentBranch}
-                      </div>
-                    )}
-                    {member.workingOn && (
-                      <div className="text-xs text-gray-600 mt-1 truncate">
-                        {member.workingOn}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Recent Activities */}
+        {/* User Activity Sections */}
         <div>
-          <h3 className="text-sm font-medium text-gray-900 mb-3">Recent Activity</h3>
-          {activities.length === 0 ? (
+          <h3 className="text-sm font-medium text-gray-900 mb-4">Team Activity</h3>
+          {userActivities.length === 0 ? (
             <div className="text-center py-8">
               <div className="text-4xl mb-4">📭</div>
               <h3 className="text-lg font-medium text-gray-900 mb-2">No Recent Activity</h3>
@@ -271,33 +200,69 @@ export function LiveActivityPanel({ project }: LiveActivityPanelProps) {
               </p>
             </div>
           ) : (
-            <div className="space-y-2">
-              {activities.map((activity) => (
-                <div
-                  key={activity.id}
-                  className="flex items-start space-x-3 p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
-                >
-                  <div className="text-lg flex-shrink-0">{getActivityIcon(activity.activityType)}</div>
-                  <div className="flex-1 min-w-0">
+            <div className="space-y-6">
+              {userActivities.map((userActivity) => (
+                <div key={userActivity.userId} className="border border-gray-200 rounded-lg overflow-hidden">
+                  {/* User Header */}
+                  <div className="bg-gray-50 border-b border-gray-200 px-4 py-3">
                     <div className="flex items-center justify-between">
-                      <div className="text-sm font-medium text-gray-900">{activity.userName}</div>
-                      <div className="text-xs text-gray-500">{formatTimeAgo(activity.occurredAt)}</div>
-                    </div>
-                    <div className="text-sm text-gray-600 mt-1 truncate">
-                      {activity.activityData?.subject || 'Activity'}
-                    </div>
-                    <div className="flex items-center space-x-2 mt-1">
-                      {activity.branchName && (
-                        <span className="text-xs text-blue-600 bg-blue-50 px-2 py-0.5 rounded">
-                          {activity.branchName}
+                      <div className="flex items-center space-x-3">
+                        <div className={`w-2.5 h-2.5 rounded-full ${userActivity.isOnline ? 'bg-green-500' : 'bg-gray-300'}`}></div>
+                        <div>
+                          <div className="text-sm font-semibold text-gray-900">{userActivity.userName}</div>
+                          <div className="text-xs text-gray-500">{userActivity.userEmail}</div>
+                        </div>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        {userActivity.currentBranch && (
+                          <span className="text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded font-medium">
+                            🔀 {userActivity.currentBranch}
+                          </span>
+                        )}
+                        <span className="text-xs text-gray-500">
+                          {formatTimeAgo(userActivity.lastActivity)}
                         </span>
-                      )}
-                      {activity.commitHash && (
-                        <span className="text-xs text-gray-500 font-mono">
-                          {activity.commitHash.substring(0, 7)}
-                        </span>
-                      )}
+                      </div>
                     </div>
+                  </div>
+
+                  {/* User's Recent Activities */}
+                  <div className="divide-y divide-gray-100">
+                    {userActivity.activities.map((activity) => (
+                      <div
+                        key={activity.id}
+                        className="flex items-start space-x-3 px-4 py-3 hover:bg-gray-50 transition-colors"
+                      >
+                        <div className="text-lg flex-shrink-0 mt-0.5">{getActivityIcon(activity.activityType)}</div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-xs text-gray-500">{formatTimeAgo(activity.occurredAt)}</span>
+                          </div>
+                          <div className="text-sm text-gray-900 mb-2">
+                            {activity.activityData?.subject || 'Activity'}
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            {activity.branchName && (
+                              <span className="text-xs text-blue-600 bg-blue-50 px-2 py-0.5 rounded">
+                                {activity.branchName}
+                              </span>
+                            )}
+                            {activity.commitHash && (
+                              <span className="text-xs text-gray-500 font-mono">
+                                {activity.commitHash.substring(0, 7)}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Activity Count Footer */}
+                  <div className="bg-gray-50 border-t border-gray-200 px-4 py-2 text-center">
+                    <span className="text-xs text-gray-600">
+                      {userActivity.activities.length} recent {userActivity.activities.length === 1 ? 'commit' : 'commits'}
+                    </span>
                   </div>
                 </div>
               ))}
