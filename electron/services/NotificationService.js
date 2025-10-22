@@ -15,8 +15,37 @@ class NotificationService {
   }
 
   initializeSupabase() {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    // Try to load from environment variables first
+    let supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    let supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+    // If not found in env, try to read from .env.local file
+    if (!supabaseUrl || !supabaseKey) {
+      try {
+        const path = require('path');
+        const fs = require('fs');
+        const dotenv = require('dotenv');
+        
+        // Try different possible locations for .env.local
+        const possiblePaths = [
+          path.join(__dirname, '../../.env.local'),
+          path.join(process.resourcesPath, '.env.local'),
+          path.join(process.cwd(), '.env.local')
+        ];
+        
+        for (const envPath of possiblePaths) {
+          if (fs.existsSync(envPath)) {
+            console.log('🔍 Found .env.local at:', envPath);
+            const envConfig = dotenv.parse(fs.readFileSync(envPath));
+            supabaseUrl = envConfig.NEXT_PUBLIC_SUPABASE_URL;
+            supabaseKey = envConfig.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+            if (supabaseUrl && supabaseKey) break;
+          }
+        }
+      } catch (error) {
+        console.warn('⚠️ Could not load .env.local file:', error.message);
+      }
+    }
 
     console.log('🔧 NotificationService environment check:');
     console.log('  SUPABASE_URL:', supabaseUrl ? '✅ Found' : '❌ Missing');
@@ -24,6 +53,7 @@ class NotificationService {
 
     if (!supabaseUrl || !supabaseKey) {
       console.error('❌ Supabase credentials not found in environment');
+      console.error('Please create a .env.local file with NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY');
       console.error('Available env vars:', Object.keys(process.env).filter(key => key.includes('SUPABASE')));
       return;
     }

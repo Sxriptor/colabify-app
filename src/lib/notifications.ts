@@ -21,12 +21,21 @@ export class PushNotificationManager {
   private static instance: PushNotificationManager
   private registration: ServiceWorkerRegistration | null = null
   private subscription: PushSubscription | null = null
+  private electronSubscriptionState: boolean = false // Track Electron subscription state locally
 
   static getInstance(): PushNotificationManager {
     if (!PushNotificationManager.instance) {
       PushNotificationManager.instance = new PushNotificationManager()
     }
     return PushNotificationManager.instance
+  }
+
+  constructor() {
+    // Load subscription state from localStorage for Electron
+    if (typeof window !== 'undefined' && this.isElectron()) {
+      const saved = localStorage.getItem('electron_notifications_enabled')
+      this.electronSubscriptionState = saved === 'true'
+    }
   }
 
   // Check if running in Electron
@@ -101,8 +110,11 @@ export class PushNotificationManager {
 
   // Subscribe to push notifications
   async subscribe(): Promise<PushSubscription | null> {
-    // Electron doesn't use push subscriptions
+    // Electron doesn't use push subscriptions, but we track the state
     if (this.isElectron()) {
+      this.electronSubscriptionState = true
+      localStorage.setItem('electron_notifications_enabled', 'true')
+      console.log('✅ Electron notifications enabled and saved to localStorage')
       return null
     }
 
@@ -134,9 +146,11 @@ export class PushNotificationManager {
 
   // Get existing subscription
   async getSubscription(): Promise<PushSubscription | null> {
-    // Electron doesn't use push subscriptions
+    // Electron doesn't use push subscriptions, but return a fake subscription if enabled
+    // This allows the UI to show the correct state
     if (this.isElectron()) {
-      return null
+      // Return a truthy value if notifications are enabled, null otherwise
+      return this.electronSubscriptionState ? ({} as PushSubscription) : null
     }
 
     if (!this.registration) {
@@ -153,8 +167,11 @@ export class PushNotificationManager {
 
   // Unsubscribe from push notifications
   async unsubscribe(): Promise<boolean> {
-    // In Electron, there's nothing to unsubscribe from
+    // In Electron, update the local state
     if (this.isElectron()) {
+      this.electronSubscriptionState = false
+      localStorage.setItem('electron_notifications_enabled', 'false')
+      console.log('✅ Electron notifications disabled and saved to localStorage')
       return true
     }
 

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { pushNotificationManager, NotificationPayload } from '@/lib/notifications'
+import { useAuth } from '@/lib/auth/context'
 
 export interface UsePushNotificationsReturn {
   isSupported: boolean
@@ -16,6 +17,7 @@ export interface UsePushNotificationsReturn {
 }
 
 export function usePushNotifications(): UsePushNotificationsReturn {
+  const { user } = useAuth()
   const [isSupported, setIsSupported] = useState(false)
   const [permission, setPermission] = useState<NotificationPermission>('default')
   const [isSubscribed, setIsSubscribed] = useState(false)
@@ -24,13 +26,13 @@ export function usePushNotifications(): UsePushNotificationsReturn {
 
   // Check support and initial state
   useEffect(() => {
-    const checkSupport = () => {
+    const checkSupport = async () => {
       const supported = pushNotificationManager.isSupported()
       setIsSupported(supported)
-      
+
       if (supported) {
         setPermission(pushNotificationManager.getPermissionStatus())
-        checkSubscriptionStatus()
+        await checkSubscriptionStatus()
       } else {
         setIsLoading(false)
       }
@@ -101,6 +103,23 @@ export function usePushNotifications(): UsePushNotificationsReturn {
     try {
       const success = await pushNotificationManager.initialize()
       setIsSubscribed(success)
+
+      // If in Electron and user is logged in, start the notification service
+      if (success && user && typeof window !== 'undefined' && (window as any).electronAPI) {
+        try {
+          const { createElectronClient } = await import('@/lib/supabase/electron-client')
+          const supabase = await createElectronClient()
+          const { data: { session } } = await supabase.auth.getSession()
+
+          if (session?.access_token) {
+            await (window as any).electronAPI.invoke('notifications:init', user.id, session.access_token)
+            console.log('✅ Electron notification service started')
+          }
+        } catch (electronError) {
+          console.warn('Failed to start Electron notification service:', electronError)
+        }
+      }
+
       return success
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to subscribe'
@@ -109,7 +128,7 @@ export function usePushNotifications(): UsePushNotificationsReturn {
     } finally {
       setIsLoading(false)
     }
-  }, [isSupported, permission, requestPermission])
+  }, [isSupported, permission, requestPermission, user])
 
   // Unsubscribe from push notifications
   const unsubscribe = useCallback(async (): Promise<boolean> => {
@@ -118,15 +137,28 @@ export function usePushNotifications(): UsePushNotificationsReturn {
 
     try {
       const success = await pushNotificationManager.unsubscribe()
-      
+
       if (success) {
-        // Also remove from server
-        await fetch('/api/notifications/subscribe', {
-          method: 'DELETE'
-        })
+        // Also remove from server (if not in Electron)
+        if (typeof window !== 'undefined' && !(window as any).electronAPI?.isElectron) {
+          await fetch('/api/notifications/subscribe', {
+            method: 'DELETE'
+          })
+        }
+
+        // Stop Electron notification service if in Electron
+        if (typeof window !== 'undefined' && (window as any).electronAPI) {
+          try {
+            await (window as any).electronAPI.invoke('notifications:stop')
+            console.log('✅ Electron notification service stopped')
+          } catch (electronError) {
+            console.warn('Failed to stop Electron notification service:', electronError)
+          }
+        }
+
         setIsSubscribed(false)
       }
-      
+
       return success
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to unsubscribe'

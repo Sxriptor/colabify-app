@@ -2,9 +2,11 @@
 
 import { useState } from 'react'
 import { useAuth } from '@/lib/auth/context'
+import { useNotificationPreferences } from '@/hooks/useNotificationPreferences'
 
 export function TestNotificationButton() {
   const { user } = useAuth()
+  const { preferences, updatePreferences } = useNotificationPreferences()
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
 
@@ -15,6 +17,27 @@ export function TestNotificationButton() {
     setMessage('')
 
     try {
+      // Ensure notifications are enabled
+      if (!preferences.app) {
+        setMessage('⚙️ Enabling app notifications...')
+        await updatePreferences({ app: true })
+
+        // Start the Electron notification service
+        if (typeof window !== 'undefined' && (window as any).electronAPI) {
+          const { createElectronClient } = await import('@/lib/supabase/electron-client')
+          const supabase = await createElectronClient()
+          const { data: { session } } = await supabase.auth.getSession()
+
+          if (session?.access_token) {
+            await (window as any).electronAPI.invoke('notifications:init', user.id, session.access_token)
+            console.log('✅ Electron notification service started')
+          }
+        }
+
+        // Give it a moment to start
+        await new Promise(resolve => setTimeout(resolve, 500))
+      }
+
       const { createElectronClient } = await import('@/lib/supabase/electron-client')
       const supabase = await createElectronClient()
 
