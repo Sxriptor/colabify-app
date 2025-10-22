@@ -4,7 +4,7 @@
   "private": true,
   "main": "electron/main.js",
   "scripts": {
-    "dev": "concurrently \"cross-env NODE_ENV=development next dev --turbopack\" \"wait-on http://localhost:3000 && cross-env NODE_ENV=development electron .\"",
+    "dev": "concurrently \"cross-env NODE_ENV=development next dev --turbopack\" \"cross-env NODE_ENV=development electron .\"",
     "next:dev": "next dev --turbopack",
     "next:build": "next build",
     "next:export": "next export",
