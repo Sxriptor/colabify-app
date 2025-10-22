@@ -11,6 +11,7 @@ console.log('  SUPABASE_KEY:', process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ? '✅ 
 const { app, BrowserWindow, Notification, ipcMain, shell, dialog } = require('electron');
 const AuthManager = require('./services/AuthManager');
 const isDev = process.env.NODE_ENV === 'development';
+const net = require('net');
 
 // Use built-in fetch (Node.js 18+)
 const fetch = globalThis.fetch;
@@ -23,6 +24,126 @@ const AutoUpdaterService = require('./services/AutoUpdaterService');
 const autoUpdaterService = new AutoUpdaterService();
 
 let mainWindow;
+let selectedPort = 3000; // Global variable to store the selected port
+
+// Function to check if a port is available
+function isPortAvailable(port) {
+  return new Promise((resolve) => {
+    const server = net.createServer();
+    
+    server.once('error', (err) => {
+      if (err.code === 'EADDRINUSE') {
+        resolve(false);
+      } else {
+        resolve(false);
+      }
+    });
+    
+    server.once('listening', () => {
+      server.close();
+      resolve(true);
+    });
+    
+    server.listen(port, 'localhost');
+  });
+}
+
+// Function to check if a port has a running HTTP server (for dev mode)
+async function checkPortHasServer(port) {
+  return new Promise((resolve) => {
+    const http = require('http');
+    const req = http.get(`http://localhost:${port}`, (res) => {
+      resolve(true);
+    });
+    
+    req.on('error', () => {
+      resolve(false);
+    });
+    
+    req.setTimeout(1000, () => {
+      req.destroy();
+      resolve(false);
+    });
+  });
+}
+
+// Function to detect Next.js dev server port (tries multiple ports)
+async function detectNextJsPort() {
+  console.log('🔍 Detecting Next.js dev server port...');
+  
+  // First, check which ports are busy to determine the search order
+  const port3000Busy = !(await isPortAvailable(3000));
+  
+  if (port3000Busy) {
+    console.log('⚠️ Port 3000 is already busy, Next.js likely starting on port 3001...');
+  }
+  
+  // In development, Next.js might be on 3000 or 3001
+  // If port 3000 is already occupied, prioritize checking 3001
+  for (let attempt = 0; attempt < 15; attempt++) {
+    if (port3000Busy) {
+      // Port 3000 was busy when we started, so check 3001 first
+      const port3001HasServer = await checkPortHasServer(3001);
+      if (port3001HasServer) {
+        console.log('✅ Found Next.js dev server on port 3001');
+        selectedPort = 3001;
+        return 3001;
+      }
+      
+      // Still check 3000 as fallback, but it's less likely
+      const port3000HasServer = await checkPortHasServer(3000);
+      if (port3000HasServer) {
+        console.log('✅ Found Next.js dev server on port 3000');
+        selectedPort = 3000;
+        return 3000;
+      }
+    } else {
+      // Port 3000 was free, so check it first
+      const port3000HasServer = await checkPortHasServer(3000);
+      if (port3000HasServer) {
+        console.log('✅ Found Next.js dev server on port 3000');
+        selectedPort = 3000;
+        return 3000;
+      }
+      
+      // Check 3001 as fallback
+      const port3001HasServer = await checkPortHasServer(3001);
+      if (port3001HasServer) {
+        console.log('✅ Found Next.js dev server on port 3001');
+        selectedPort = 3001;
+        return 3001;
+      }
+    }
+    
+    // Wait a bit before trying again
+    console.log(`⏳ Waiting for Next.js dev server... (attempt ${attempt + 1}/15)`);
+    await new Promise(resolve => setTimeout(resolve, 1000));
+  }
+  
+  console.error('❌ Could not detect Next.js dev server on ports 3000 or 3001');
+  throw new Error('Next.js dev server not found on ports 3000 or 3001');
+}
+
+// Function to select an available port (for production mode)
+async function selectAvailablePort() {
+  const port3000Available = await isPortAvailable(3000);
+  if (port3000Available) {
+    console.log('✅ Port 3000 is available');
+    selectedPort = 3000;
+    return 3000;
+  }
+  
+  console.log('⚠️ Port 3000 is busy, checking port 3001...');
+  const port3001Available = await isPortAvailable(3001);
+  if (port3001Available) {
+    console.log('✅ Port 3001 is available');
+    selectedPort = 3001;
+    return 3001;
+  }
+  
+  console.error('❌ Both ports 3000 and 3001 are busy!');
+  throw new Error('Neither port 3000 nor 3001 is available');
+}
 
 // Register IPC handlers early
 console.log('🔧 Registering IPC handlers...');
@@ -120,14 +241,15 @@ async function createWindow() {
   let url;
   if (isDev) {
     // In development, connect to Next.js dev server
-    url = 'http://localhost:3000';
+    console.log(`🌐 Connecting to Next.js dev server on port ${selectedPort}`);
+    url = `http://localhost:${selectedPort}`;
   } else {
     // In production, run the Next.js standalone server
     const path = require('path');
     const fs = require('fs');
     const { spawn } = require('child_process');
     
-    console.log('🚀 Starting Next.js standalone server...');
+    console.log(`🚀 Starting Next.js standalone server on port ${selectedPort}...`);
     
     // Path to the standalone server
     const serverPath = path.join(__dirname, '../.next/standalone/server.js');
@@ -176,7 +298,7 @@ async function createWindow() {
           cwd: standalonePath,
           env: {
             ...process.env,
-            PORT: '3000',
+            PORT: selectedPort.toString(),
             HOSTNAME: 'localhost',
           },
           stdio: ['ignore', 'pipe', 'pipe']
@@ -204,7 +326,7 @@ async function createWindow() {
         // Give the server a moment to start
         await new Promise(resolve => setTimeout(resolve, 2000));
         
-        url = 'http://localhost:3000';
+        url = `http://localhost:${selectedPort}`;
         console.log('✅ Next.js standalone server started');
       } catch (error) {
         console.error('❌ Failed to start Next.js server:', error);
@@ -230,8 +352,8 @@ async function createWindow() {
   mainWindow.webContents.on('will-navigate', (event, navigationUrl) => {
     const parsedUrl = new URL(navigationUrl);
 
-    // Allow navigation within the app (always localhost:3000 since we need API routes)
-    if (parsedUrl.origin !== 'http://localhost:3000') {
+    // Allow navigation within the app (using the selected port since we need API routes)
+    if (parsedUrl.origin !== `http://localhost:${selectedPort}`) {
       event.preventDefault();
       console.log('Blocked navigation to:', navigationUrl);
     }
@@ -687,25 +809,50 @@ async function initializeGitMonitoring(mainWindow) {
 
 // No protocol testing needed with external browser auth
 
-// Single instance handling (keep window focus behavior)
-const gotTheLock = app.requestSingleInstanceLock();
-
-if (!gotTheLock) {
-  app.quit();
+// Single instance lock (disabled in development mode to allow multiple instances)
+if (isDev) {
+  // In development, allow multiple instances
+  console.log('🔧 Development mode: Multiple instances allowed');
 } else {
-  app.on('second-instance', (event, commandLine, workingDirectory) => {
-    // Someone tried to run a second instance, focus our window instead
-    if (mainWindow) {
-      if (mainWindow.isMinimized()) {
-        mainWindow.restore();
+  // In production, enforce single instance
+  const gotTheLock = app.requestSingleInstanceLock();
+  
+  if (!gotTheLock) {
+    console.log('⚠️ Another instance is already running. Exiting...');
+    app.quit();
+  } else {
+    console.log('✅ Single instance lock acquired');
+    app.on('second-instance', (event, commandLine, workingDirectory) => {
+      console.log('⚠️ Second instance attempted to start, focusing existing window...');
+      // Someone tried to run a second instance, focus our window instead
+      if (mainWindow) {
+        if (mainWindow.isMinimized()) {
+          mainWindow.restore();
+        }
+        mainWindow.focus();
+        mainWindow.show();
       }
-      mainWindow.focus();
-    }
-  });
+    });
+  }
 }
 
 // App lifecycle events
 app.whenReady().then(async () => {
+  // Select an available port before creating the window
+  try {
+    if (isDev) {
+      // In development, detect which port Next.js is running on
+      await detectNextJsPort();
+    } else {
+      // In production, select an available port for our standalone server
+      await selectAvailablePort();
+    }
+    console.log(`✅ Selected port: ${selectedPort}`);
+  } catch (error) {
+    console.error('❌ Failed to select an available port:', error);
+    // Continue with default port 3000 if selection fails
+  }
+  
   // Set dock icon for macOS
   if (process.platform === 'darwin') {
     const dockIconPath = isDev 

@@ -59,6 +59,3 @@ dist-electron/
 release/
 .electron-builder.yaml
 builder-effective-config.yaml
-
-# local electron config (untracked)
-electron.config.local.js
