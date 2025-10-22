@@ -55,9 +55,17 @@ export function LocalChangesPanel({ project }: LocalChangesPanelProps) {
     const result: LocalChangesData[] = []
 
     for (const branch of branches) {
-      // Get recent commits for this branch/repo
+      // Get recent commits for this specific local repo path
+      // Filter by localPath first to ensure we get commits from the correct folder
       const recentCommits = commits
-        .filter(c => c.branch === branch.branch || !c.branch)
+        .filter(c => {
+          // Match commits to this specific local path
+          const matchesLocalPath = c.localPath === branch.path
+          // Also check if branch matches (as a secondary filter)
+          const matchesBranch = c.branch === branch.branch || !c.branch
+
+          return matchesLocalPath || (matchesBranch && !c.localPath)
+        })
         .slice(0, 5)
         .map(c => ({
           sha: c.sha,
