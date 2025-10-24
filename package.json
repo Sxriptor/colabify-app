@@ -32,6 +32,10 @@
     "build:mac": "npm run build && electron-builder --mac --publish=never",
     "build:win": "npm run build && electron-builder --win --publish=never",
     "build:linux": "npm run build && electron-builder --linux --publish=never",
+    "build:unsigned": "node scripts/build-unsigned.js",
+    "build:unsigned:mac": "node scripts/build-unsigned.js mac",
+    "build:unsigned:win": "node scripts/build-unsigned.js win",
+    "build:unsigned:linux": "node scripts/build-unsigned.js linux",
     "publish:mac": "npm run build && electron-builder --mac --publish always",
     "publish:win": "npm run build && electron-builder --win --publish always",
     "publish:linux": "npm run build && electron-builder --linux --publish always"
@@ -68,6 +72,9 @@
         "dmg",
         "zip"
       ],
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false,
+      "identity": null,
       "artifactName": "Colabify-Setup.${ext}"
     },
     "win": {

@@ -30,6 +30,22 @@ class AutoUpdaterService {
     // Auto-install on app quit
     autoUpdater.autoInstallOnAppQuit = true;
 
+    // Disable signature verification for unsigned apps
+    autoUpdater.disableWebInstaller = false;
+    autoUpdater.allowDowngrade = false;
+    
+    // For macOS: disable signature verification and handle unsigned apps
+    if (process.platform === 'darwin') {
+      process.env.ELECTRON_IS_DEV = '0'; // Ensure we're not in dev mode for updater
+      autoUpdater.allowPrerelease = false;
+      
+      // Set updater logger for debugging
+      autoUpdater.logger = console;
+    }
+    
+    // Handle unsigned app updates by disabling signature verification
+    process.env.ELECTRON_UPDATER_ALLOW_UNSIGNED = '1';
+
     // Log all events in development
     if (process.env.NODE_ENV === 'development') {
       autoUpdater.forceDevUpdateConfig = true;
