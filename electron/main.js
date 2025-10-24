@@ -37,7 +37,7 @@ console.log('  NODE_ENV:', process.env.NODE_ENV || 'not set');
 console.log('  Platform:', process.platform);
 console.log('  Architecture:', process.arch);
 
-const { app, BrowserWindow, Notification, ipcMain, shell, dialog } = require('electron');
+const { app, BrowserWindow, Notification, ipcMain, shell, dialog, Tray, Menu, nativeImage } = require('electron');
 const AuthManager = require('./services/AuthManager');
 const isDev = process.env.NODE_ENV === 'development';
 const net = require('net');
@@ -53,6 +53,7 @@ const AutoUpdaterService = require('./services/AutoUpdaterService');
 const autoUpdaterService = new AutoUpdaterService();
 
 let mainWindow;
+let tray = null; // System tray instance
 let selectedPort = 3000; // Global variable to store the selected port
 
 // Function to check if a port is available
@@ -222,6 +223,110 @@ ipcMain.handle('test:folder-selection', async () => {
 console.log('✅ Early IPC handlers registered');
 
 // No protocol registration needed - using external browser with local callback server
+
+// Function to create system tray
+function createSystemTray() {
+  console.log('🔔 Creating system tray...');
+  
+  // Get the appropriate icon for the tray
+  const getTrayIconPath = () => {
+    if (process.platform === 'win32') {
+      // Windows uses .ico for tray icons
+      return path.join(__dirname, '../build/icon.ico');
+    } else if (process.platform === 'darwin') {
+      // macOS uses template images for tray (PNG with @2x for Retina)
+      return path.join(__dirname, '../public/icons/colabify.png');
+    } else {
+      // Linux uses PNG
+      return path.join(__dirname, '../public/icons/colabify.png');
+    }
+  };
+  
+  const trayIconPath = getTrayIconPath();
+  console.log('🎨 Tray icon path:', trayIconPath);
+  console.log('🎨 Tray icon exists:', fs.existsSync(trayIconPath));
+  
+  // Create tray icon
+  const trayImage = nativeImage.createFromPath(trayIconPath);
+  
+  // Resize for better display on different platforms
+  if (process.platform === 'darwin') {
+    // macOS tray icons should be 22x22 (or 16x16)
+    tray = new Tray(trayImage.resize({ width: 22, height: 22 }));
+  } else {
+    tray = new Tray(trayImage);
+  }
+  
+  tray.setToolTip('Colabify');
+  
+  // Create context menu
+  const contextMenu = Menu.buildFromTemplate([
+    {
+      label: 'Show Colabify',
+      click: () => {
+        if (mainWindow) {
+          if (mainWindow.isMinimized()) {
+            mainWindow.restore();
+          }
+          mainWindow.show();
+          mainWindow.focus();
+        }
+      }
+    },
+    {
+      label: 'Notifications',
+      click: () => {
+        if (mainWindow) {
+          if (mainWindow.isMinimized()) {
+            mainWindow.restore();
+          }
+          mainWindow.show();
+          mainWindow.focus();
+          // Navigate to inbox page
+          mainWindow.webContents.send('navigate-to-inbox');
+        }
+      }
+    },
+    {
+      type: 'separator'
+    },
+    {
+      label: 'Quit',
+      click: () => {
+        app.isQuitting = true;
+        app.quit();
+      }
+    }
+  ]);
+  
+  // Set context menu (shows on right-click)
+  tray.setContextMenu(contextMenu);
+  
+  // Handle left-click on tray icon
+  tray.on('click', () => {
+    if (mainWindow) {
+      if (mainWindow.isVisible()) {
+        mainWindow.hide();
+      } else {
+        mainWindow.show();
+        mainWindow.focus();
+      }
+    }
+  });
+  
+  // Handle double-click on tray icon (Windows)
+  tray.on('double-click', () => {
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) {
+        mainWindow.restore();
+      }
+      mainWindow.show();
+      mainWindow.focus();
+    }
+  });
+  
+  console.log('✅ System tray created');
+}
 
 async function createWindow() {
   // Use platform-specific icons for best quality
@@ -551,6 +656,14 @@ async function createWindow() {
   if (isDev) {
     mainWindow.webContents.openDevTools();
   }
+
+  // Handle window close - minimize to tray instead of closing
+  mainWindow.on('close', (event) => {
+    if (!app.isQuitting) {
+      event.preventDefault();
+      mainWindow.hide();
+    }
+  });
 
   mainWindow.on('closed', () => {
     mainWindow = null;
@@ -1071,6 +1184,9 @@ app.whenReady().then(async () => {
   }
   
   await createWindow();
+  
+  // Create system tray
+  createSystemTray();
 
   app.on('activate', async () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -1080,14 +1196,19 @@ app.whenReady().then(async () => {
 });
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
-    app.quit();
-  }
+  // Keep the app running in the tray even when all windows are closed
+  // Don't quit the app - it will continue running in the system tray
+  // User must explicitly choose "Quit" from the tray menu
+  console.log('🪟 All windows closed, app still running in tray');
 });
 
-// Cleanup Git monitoring backend, notification service, auto-updater, and Next.js server on app quit
+// Cleanup Git monitoring backend, notification service, auto-updater, tray, and Next.js server on app quit
 app.on('before-quit', async (event) => {
   let needsCleanup = false;
+
+  if (tray) {
+    needsCleanup = true;
+  }
 
   if (gitMonitoringBackend && gitMonitoringBackend.isInitialized()) {
     needsCleanup = true;
@@ -1109,6 +1230,13 @@ app.on('before-quit', async (event) => {
     event.preventDefault();
 
     try {
+      // Cleanup system tray
+      if (tray) {
+        console.log('🔔 Destroying system tray...');
+        tray.destroy();
+        tray = null;
+      }
+
       // Cleanup Next.js server
       if (global.nextServerProcess) {
         console.log('🛑 Stopping Next.js server...');

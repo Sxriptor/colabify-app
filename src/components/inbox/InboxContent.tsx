@@ -157,7 +157,15 @@ export function InboxContent() {
         .limit(50) // Limit to avoid too many notifications
 
       if (error) throw error
-      setNotifications(data || [])
+
+      // Transform the data to match our interface (Supabase may return arrays for relations)
+      const transformedData = (data || []).map(item => ({
+        ...item,
+        project: Array.isArray(item.project) ? item.project[0] : item.project,
+        repository: Array.isArray(item.repository) ? item.repository[0] : item.repository
+      }))
+
+      setNotifications(transformedData)
     } catch (err) {
       console.error('Error fetching notifications:', err)
       // Don't set error state for notifications to avoid blocking the UI
@@ -301,42 +309,50 @@ export function InboxContent() {
             <div className="mb-8">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">Legacy Notifications</h3>
               <div className="space-y-4">
-                {notifications.map((notification) => (
-                  <div key={notification.id} className="bg-white shadow rounded-lg border border-gray-200">
-                    <div className="p-6">
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-3 mb-2">
-                            <h4 className="text-lg font-medium text-gray-900">
-                              {notification.project.name} - {notification.repository.name}
-                            </h4>
-                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${notification.event_type === 'push' ? 'bg-green-100 text-green-800' :
-                              notification.event_type === 'pull_request' ? 'bg-blue-100 text-blue-800' :
-                                notification.event_type === 'issues' ? 'bg-red-100 text-red-800' :
-                                  'bg-gray-100 text-gray-800'
-                              }`}>
-                              {notification.event_type}
-                            </span>
-                          </div>
-                          <p className="text-gray-600 mb-3">{notification.message}</p>
-                          <div className="flex items-center gap-4 text-sm text-gray-500 mb-4">
-                            <div>{formatDate(notification.created_at)}</div>
-                            <div>•</div>
-                            <div>Triggered by {notification.triggered_by}</div>
-                          </div>
-                          <div className="flex items-center gap-3">
-                            <button
-                              onClick={() => router.push(`/projects/${notification.project_id}`)}
-                              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors duration-200"
-                            >
-                              View Project
-                            </button>
+                {notifications.map((notification) => {
+                  // Skip notifications with missing data
+                  if (!notification.project || !notification.repository) {
+                    console.error('Notification missing project or repository data:', notification)
+                    return null
+                  }
+
+                  return (
+                    <div key={notification.id} className="bg-white shadow rounded-lg border border-gray-200">
+                      <div className="p-6">
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-3 mb-2">
+                              <h4 className="text-lg font-medium text-gray-900">
+                                {notification.project.name} - {notification.repository.name}
+                              </h4>
+                              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${notification.event_type === 'push' ? 'bg-green-100 text-green-800' :
+                                notification.event_type === 'pull_request' ? 'bg-blue-100 text-blue-800' :
+                                  notification.event_type === 'issues' ? 'bg-red-100 text-red-800' :
+                                    'bg-gray-100 text-gray-800'
+                                }`}>
+                                {notification.event_type}
+                              </span>
+                            </div>
+                            <p className="text-gray-600 mb-3">{notification.message}</p>
+                            <div className="flex items-center gap-4 text-sm text-gray-500 mb-4">
+                              <div>{formatDate(notification.created_at)}</div>
+                              <div>•</div>
+                              <div>Triggered by {notification.triggered_by}</div>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <button
+                                onClick={() => router.push(`/projects/${notification.project_id}`)}
+                                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors duration-200"
+                              >
+                                View Project
+                              </button>
+                            </div>
                           </div>
                         </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             </div>
           )}

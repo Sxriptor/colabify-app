@@ -18,6 +18,9 @@ declare global {
       invoke: (channel: string, ...args: any[]) => Promise<any>;
       platform: string;
       isElectron: boolean;
+      // Navigation API (from tray menu)
+      onNavigateToInbox: (callback: () => void) => void;
+      removeNavigationListeners: () => void;
       // Auto-updater API
       checkForUpdates: () => Promise<{ success: boolean; error?: string }>;
       downloadUpdate: () => Promise<{ success: boolean; error?: string }>;

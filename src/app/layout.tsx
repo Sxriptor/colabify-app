@@ -4,6 +4,7 @@ import "./globals.css";
 import { AuthProvider } from "@/lib/auth/context";
 import { GlobalFloatingMenu } from "@/components/ui/GlobalFloatingMenu";
 import { UpdateNotification } from "@/components/ui/UpdateNotification";
+import { TrayNavigationListener } from "@/components/TrayNavigationListener";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -44,6 +45,7 @@ export default function RootLayout({
           {children}
           <GlobalFloatingMenu />
           <UpdateNotification />
+          <TrayNavigationListener />
         </AuthProvider>
       </body>
     </html>

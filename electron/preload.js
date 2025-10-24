@@ -59,6 +59,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.removeAllListeners('auth-signed-out');
   },
 
+  // Navigation event listener
+  onNavigateToInbox: (callback) => {
+    console.log('🎧 PRELOAD: Setting up navigate-to-inbox listener');
+    ipcRenderer.on('navigate-to-inbox', () => {
+      console.log('🎧 PRELOAD: navigate-to-inbox event received!');
+      callback();
+    });
+  },
+  removeNavigationListeners: () => {
+    ipcRenderer.removeAllListeners('navigate-to-inbox');
+  },
+
   // Platform information
   platform: process.platform,
   isElectron: true,
