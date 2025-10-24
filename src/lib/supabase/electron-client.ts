@@ -1,8 +1,13 @@
-import { createClient } from '@supabase/supabase-js'
+import { createClient, SupabaseClient } from '@supabase/supabase-js'
+
+// Singleton instance to prevent multiple GoTrueClient warnings
+let electronClientInstance: SupabaseClient | null = null
+let currentToken: string | null = null
 
 /**
  * Create a Supabase client for Electron that uses the stored auth token
  * This allows direct communication with Supabase without going through the website API
+ * Uses singleton pattern to avoid multiple GoTrueClient instances
  */
 export async function createElectronClient() {
   if (typeof window === 'undefined' || !(window as any).electronAPI) {
@@ -17,11 +22,25 @@ export async function createElectronClient() {
     throw new Error('Not authenticated')
   }
 
-  // Create Supabase client with the token
-  const client = createClient(
+  // Return existing client if token hasn't changed
+  if (electronClientInstance && currentToken === token) {
+    return electronClientInstance
+  }
+
+  // Create new client only if token changed or no client exists
+  console.log('🔄 Creating new Electron Supabase client')
+  currentToken = token
+  
+  electronClientInstance = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+        detectSessionInUrl: false,
+        storage: undefined, // Disable storage to prevent conflicts
+      },
       global: {
         headers: {
           Authorization: `Bearer ${token}`
@@ -30,5 +49,14 @@ export async function createElectronClient() {
     }
   )
 
-  return client
+  return electronClientInstance
+}
+
+/**
+ * Reset the singleton instance (useful for logout or token refresh)
+ */
+export function resetElectronClient() {
+  electronClientInstance = null
+  currentToken = null
+  console.log('🔄 Electron Supabase client reset')
 }

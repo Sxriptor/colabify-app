@@ -2,10 +2,12 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { useNotificationPreferences } from '@/hooks/useNotificationPreferences'
+import { useAuth } from '@/lib/auth/context'
 
 export function NotificationSettings() {
+  const { user } = useAuth()
   const [isOpen, setIsOpen] = useState(false)
-  const { preferences, loading, togglePreference } = useNotificationPreferences()
+  const { preferences, loading, togglePreference, updatePreferences } = useNotificationPreferences()
   const dropdownRef = useRef<HTMLDivElement>(null)
 
   // Close dropdown when clicking outside
@@ -19,6 +21,54 @@ export function NotificationSettings() {
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
+
+  // Handle app notification toggle with system permission request
+  const handleAppToggle = async () => {
+    const newValue = !preferences.app
+
+    if (newValue) {
+      // Enabling - request system permission and start service
+      if (typeof window !== 'undefined' && (window as any).electronAPI) {
+        try {
+          // Request notification permission
+          const permission = await (window as any).electronAPI.requestNotificationPermission()
+
+          if (permission !== 'granted') {
+            console.warn('Notification permission denied')
+            return
+          }
+
+          // Start the notification service
+          if (user) {
+            const { createElectronClient } = await import('@/lib/supabase/electron-client')
+            const supabase = await createElectronClient()
+            const { data: { session } } = await supabase.auth.getSession()
+
+            if (session?.access_token) {
+              await (window as any).electronAPI.invoke('notifications:init', user.id, session.access_token)
+              console.log('✅ Electron notification service started')
+            }
+          }
+        } catch (error) {
+          console.error('Failed to enable notifications:', error)
+          return
+        }
+      }
+    } else {
+      // Disabling - stop service
+      if (typeof window !== 'undefined' && (window as any).electronAPI) {
+        try {
+          await (window as any).electronAPI.invoke('notifications:stop')
+          console.log('✅ Electron notification service stopped')
+        } catch (error) {
+          console.warn('Failed to stop notification service:', error)
+        }
+      }
+    }
+
+    // Update preferences
+    await updatePreferences({ app: newValue })
+  }
 
   return (
     <div className="relative" ref={dropdownRef}>
@@ -64,7 +114,7 @@ export function NotificationSettings() {
               <div className="flex items-center justify-between">
                 <label className="text-sm text-gray-700">App Notifications</label>
                 <button
-                  onClick={() => togglePreference('app')}
+                  onClick={handleAppToggle}
                   disabled={loading}
                   className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors duration-200 ${
                     preferences.app ? 'bg-blue-600' : 'bg-gray-300'

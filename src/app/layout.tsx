@@ -4,6 +4,7 @@ import "./globals.css";
 import { AuthProvider } from "@/lib/auth/context";
 import { GlobalFloatingMenu } from "@/components/ui/GlobalFloatingMenu";
 import { UpdateNotification } from "@/components/ui/UpdateNotification";
+import { ServiceWorkerManager } from "@/components/ServiceWorkerManager";
 import { TrayNavigationListener } from "@/components/TrayNavigationListener";
 
 const geistSans = Geist({
@@ -42,6 +43,7 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <AuthProvider>
+          <ServiceWorkerManager />
           {children}
           <GlobalFloatingMenu />
           <UpdateNotification />

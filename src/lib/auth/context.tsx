@@ -1,7 +1,7 @@
 'use client'
 
 import { createContext, useContext, useEffect, useState, useCallback } from 'react'
-import { User } from '@supabase/supabase-js'
+import { User, AuthChangeEvent, Session } from '@supabase/supabase-js'
 import { createClient } from '../supabase/client'
 
 export type CustomUser = {
@@ -183,8 +183,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       })
 
-      electronAPI.onAuthSignedOut(() => {
+      electronAPI.onAuthSignedOut(async () => {
         console.log('🔔 Auth signed out event received in context')
+        
+        // Reset Electron client singleton
+        try {
+          const { resetElectronClient } = await import('@/lib/supabase/electron-client')
+          resetElectronClient()
+        } catch (error) {
+          console.warn('Could not reset electron client:', error)
+        }
+        
         setUser(null)
         setCustomUser(null)
         // Reload to clear all state
@@ -198,7 +207,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } else if (!isElectron) {
       // For web, listen for Supabase auth changes
       const { data: { subscription } } = supabase.auth.onAuthStateChange(
-        async (event, session) => {
+        async (event: AuthChangeEvent, session: Session | null) => {
           try {
             console.log('🔄 Auth state change:', event, session?.user?.email)
             const authUser = session?.user ?? null
@@ -229,6 +238,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signOut = async () => {
     if (isElectron) {
       const electronAPI = (window as any).electronAPI
+      
+      // Reset Electron client singleton to avoid stale auth
+      try {
+        const { resetElectronClient } = await import('@/lib/supabase/electron-client')
+        resetElectronClient()
+      } catch (error) {
+        console.warn('Could not reset electron client:', error)
+      }
+      
       await electronAPI.logout()
       // Reload the page to clear all state
       window.location.href = '/'

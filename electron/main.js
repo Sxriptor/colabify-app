@@ -682,10 +682,31 @@ async function createWindow() {
 // Handle notification requests from renderer
 ipcMain.handle('show-notification', async (event, { title, body, icon }) => {
   if (Notification.isSupported()) {
+    // Find the best icon path for notifications
+    let iconPath = null;
+    if (icon) {
+      iconPath = path.join(__dirname, '../public', icon);
+    } else {
+      // Try different paths in order of preference
+      const possiblePaths = [
+        path.join(__dirname, '../build/icon.png'),           // Production build
+        path.join(__dirname, '../public/icons/icon-192x192.png'), // PNG for better compatibility
+        path.join(__dirname, '../public/icons/colabify.png') // Fallback
+      ];
+
+      for (const p of possiblePaths) {
+        if (fs.existsSync(p)) {
+          iconPath = p;
+          console.log('🎨 Using notification icon:', iconPath);
+          break;
+        }
+      }
+    }
+
     const notification = new Notification({
       title: title || 'Colabify',
       body: body || '',
-      icon: icon ? path.join(__dirname, '../public', icon) : path.join(__dirname, '../public/icons/colabify.png')
+      icon: iconPath
     });
 
     notification.show();
@@ -1133,6 +1154,12 @@ if (isDev) {
 // App lifecycle events
 app.whenReady().then(async () => {
   console.log('🚀 App ready event fired');
+
+  // Set app name for notifications and taskbar
+  app.setName('Colabify');
+  app.setAppUserModelId('com.colabify.app');
+  console.log('✅ App name set to:', app.getName());
+
   console.log('🖥️ Platform:', process.platform);
   console.log('🔧 Development mode:', isDev);
   console.log('📁 __dirname:', __dirname);

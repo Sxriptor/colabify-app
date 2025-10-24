@@ -126,43 +126,30 @@ export function InboxContent() {
       const { createElectronClient } = await import('@/lib/supabase/electron-client')
       const supabase = await createElectronClient()
 
-      // Get project IDs the user can access (owned + member of)
-      const { data: userProjects, error: projectsError } = await supabase
-        .from('projects')
-        .select('id')
-        .or(`owner_id.eq.${user.id},id.in.(${supabase
-          .from('project_members')
-          .select('project_id')
-          .eq('user_id', user.id)
-          .eq('status', 'active')
-          })`)
-
-      if (projectsError || !userProjects || userProjects.length === 0) {
-        setNotifications([])
-        return
-      }
-
-      const projectIds = userProjects.map(p => p.id)
-
-      // Get notifications for projects the user can access
+      // Get notifications for the current user directly
+      // The notifications table has user_id column, and project_id/repository_id are in the data JSONB field
       const { data, error } = await supabase
         .from('notifications')
-        .select(`
-          *,
-          project:projects(id, name),
-          repository:repositories(id, name, full_name)
-        `)
-        .in('project_id', projectIds)
+        .select('*')
+        .eq('user_id', user.id)
         .order('created_at', { ascending: false })
         .limit(50) // Limit to avoid too many notifications
 
-      if (error) throw error
+      if (error) {
+        console.error('Error fetching notifications:', error)
+        throw error
+      }
 
-      // Transform the data to match our interface (Supabase may return arrays for relations)
-      const transformedData = (data || []).map(item => ({
-        ...item,
-        project: Array.isArray(item.project) ? item.project[0] : item.project,
-        repository: Array.isArray(item.repository) ? item.repository[0] : item.repository
+      // Transform notifications to include project and repository info from data field
+      const transformedData = (data || []).map(notification => ({
+        ...notification,
+        project_id: notification.data?.project_id,
+        repository_id: notification.data?.repository_id,
+        event_type: notification.type,
+        triggered_by: notification.data?.actor_id,
+        payload: notification.data,
+        project: notification.data?.project_id ? { id: notification.data.project_id, name: '' } : undefined,
+        repository: notification.data?.repository_id ? { id: notification.data.repository_id, name: '', full_name: '' } : undefined
       }))
 
       setNotifications(transformedData)

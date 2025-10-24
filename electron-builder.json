@@ -17,6 +17,7 @@
     "electron/**/*",
     "public/**/*",
     "package.json",
+    ".env.local",
     "node_modules/**/*",
     "!node_modules/@img/sharp-darwin*",
     "!node_modules/@img/sharp-linux*",
