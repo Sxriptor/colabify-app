@@ -1,6 +1,6 @@
 {
   "name": "Colabify",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "private": true,
   "main": "electron/main.js",
   "scripts": {
@@ -29,25 +29,25 @@
     "dist:win": "npm run build && electron-builder --win",
     "publish:win": "npm run build && electron-builder --win --publish always"
   },
-"build": {
-  "appId": "xyz.colabify.app",
-  "productName": "Colabify",
-  "directories": {
-    "output": "dist-electron"
-  },
-  "files": [
-    ".next/standalone/**/*",
-    ".next/static/**/*",
-    "electron/**/*",
-    "build/**/*",
-    "public/**/*",
-    "package.json",
-    ".env.local",
-    "!node_modules/@img/**",
-    "!node_modules/@emnapi/**"
-  ],
-  "asar": false,
-  "npmRebuild": true,
+  "build": {
+    "appId": "xyz.colabify.app",
+    "productName": "Colabify",
+    "directories": {
+      "output": "dist-electron"
+    },
+    "files": [
+      ".next/standalone/**/*",
+      ".next/static/**/*",
+      "electron/**/*",
+      "build/**/*",
+      "public/**/*",
+      "package.json",
+      ".env.local",
+      "!node_modules/@img/**",
+      "!node_modules/@emnapi/**"
+    ],
+    "asar": false,
+    "npmRebuild": true,
     "nodeGypRebuild": false,
     "buildDependenciesFromSource": false,
     "extraMetadata": {

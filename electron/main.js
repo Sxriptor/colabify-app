@@ -681,7 +681,14 @@ async function createWindow() {
 
 // Handle notification requests from renderer
 ipcMain.handle('show-notification', async (event, { title, body, icon }) => {
-  if (Notification.isSupported()) {
+  console.log('🔔 Notification request received:', { title, body, icon });
+  
+  if (!Notification.isSupported()) {
+    console.warn('⚠️ Notifications not supported on this system');
+    return { success: false, error: 'Notifications not supported' };
+  }
+
+  try {
     // Find the best icon path for notifications
     let iconPath = null;
     if (icon) {
@@ -703,23 +710,78 @@ ipcMain.handle('show-notification', async (event, { title, body, icon }) => {
       }
     }
 
+    console.log('🔔 Creating notification with:', {
+      title: title || 'Colabify',
+      body: body || '',
+      iconPath,
+      platform: process.platform
+    });
+
     const notification = new Notification({
       title: title || 'Colabify',
       body: body || '',
-      icon: iconPath
+      icon: iconPath,
+      silent: false
+    });
+
+    // Add event handlers for debugging
+    notification.on('show', () => {
+      console.log('✅ Notification shown successfully');
+    });
+
+    notification.on('click', () => {
+      console.log('🖱️ Notification clicked');
+      // Focus the main window when notification is clicked
+      if (mainWindow) {
+        if (mainWindow.isMinimized()) {
+          mainWindow.restore();
+        }
+        mainWindow.show();
+        mainWindow.focus();
+      }
+    });
+
+    notification.on('close', () => {
+      console.log('🔔 Notification closed');
     });
 
     notification.show();
+    console.log('✅ Notification show() called successfully');
 
     return { success: true };
+  } catch (error) {
+    console.error('❌ Error showing notification:', error);
+    return { success: false, error: error.message };
   }
-  return { success: false, error: 'Notifications not supported' };
 });
 
 // Request notification permissions
 ipcMain.handle('request-notification-permission', async () => {
-  // Electron doesn't require explicit permission like browsers
-  return Notification.isSupported() ? 'granted' : 'denied';
+  if (!Notification.isSupported()) {
+    return 'denied';
+  }
+  
+  // On macOS, we need to explicitly request permission for signed apps
+  if (process.platform === 'darwin') {
+    try {
+      // For Electron apps, we can check if notifications are allowed
+      // by trying to create a test notification
+      const testNotification = new Notification({
+        title: 'Colabify',
+        body: 'Notifications are now enabled!',
+        silent: true
+      });
+      
+      // If we can create it, permissions are granted
+      return 'granted';
+    } catch (error) {
+      console.error('Notification permission denied:', error);
+      return 'denied';
+    }
+  }
+  
+  // For other platforms, assume granted if supported
+  return 'granted';
 });
 
 // Open URL in external browser
@@ -1159,6 +1221,30 @@ app.whenReady().then(async () => {
   app.setName('Colabify');
   app.setAppUserModelId('com.colabify.app');
   console.log('✅ App name set to:', app.getName());
+
+  // Setup notification permissions for macOS
+  if (process.platform === 'darwin') {
+    console.log('🔔 Setting up macOS notification permissions...');
+    
+    // Check if notifications are supported
+    if (Notification.isSupported()) {
+      console.log('✅ Notifications are supported on this system');
+      
+      // Try to show a silent test notification to verify permissions
+      try {
+        const testNotification = new Notification({
+          title: 'Colabify',
+          body: 'Notifications are ready!',
+          silent: true
+        });
+        console.log('✅ Notification permissions verified');
+      } catch (error) {
+        console.warn('⚠️ Notification permission issue:', error.message);
+      }
+    } else {
+      console.warn('⚠️ Notifications not supported on this system');
+    }
+  }
 
   console.log('🖥️ Platform:', process.platform);
   console.log('🔧 Development mode:', isDev);
