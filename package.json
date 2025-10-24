@@ -42,6 +42,7 @@
     "build/**/*",
     "public/**/*",
     "package.json",
+    ".env.local",
     "!node_modules/@img/**",
     "!node_modules/@emnapi/**"
   ],
