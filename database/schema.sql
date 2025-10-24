@@ -1,5 +1,5 @@
--- DevPulse Database Schema
--- This file contains the complete database schema for the DevPulse application
+-- Colabify Database Schema
+-- This file contains the complete database schema for the Colabify application
 
 -- Enable UUID extension
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";

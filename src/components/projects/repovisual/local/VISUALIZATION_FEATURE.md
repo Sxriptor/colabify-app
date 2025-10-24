@@ -285,4 +285,4 @@ const commits = await generateCommitsFromHistory(history)
 
 ## License
 
-This feature is part of the DevPulse application.
+This feature is part of the Colabify application.

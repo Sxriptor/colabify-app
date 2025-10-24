@@ -74,7 +74,7 @@ export function ElectronAuthHandler() {
                     Authentication Successful!
                   </h2>
                   <p style="margin: 0 0 1rem; color: #6b7280;">
-                    Returning to DevPulse app...
+                    Returning to Colabify app...
                   </p>
                   <p style="margin: 0; font-size: 0.875rem; color: #9ca3af;">
                     If the app doesn't open automatically, please open it manually.

@@ -139,7 +139,7 @@ SMTP_NOTIFY_USER=notifications@colabify.xyz
 
 ### Invitation Email Template
 
-**From:** `DevPulse Invitations <invites@colabify.xyz>`
+**From:** `Colabify Invitations <invites@colabify.xyz>`
 **Subject:** `You've been invited to join {ProjectName} on Colabify`
 
 **Content:**

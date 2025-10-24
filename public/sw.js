@@ -1,7 +1,7 @@
-// Service Worker for DevPulse PWA
+// Service Worker for Colabify PWA
 // This handles push notifications and offline functionality
 
-const CACHE_NAME = 'devpulse-v1';
+const CACHE_NAME = 'Colabify-v1';
 const urlsToCache = [
   '/',
   '/dashboard',
@@ -43,7 +43,7 @@ self.addEventListener('push', (event) => {
       notificationData = event.data.json();
     } catch (e) {
       notificationData = {
-        title: 'DevPulse Notification',
+        title: 'Colabify Notification',
         body: event.data.text() || 'You have a new notification',
         icon: '/icons/icon-192x192.svg',
         badge: '/icons/icon-72x72.svg'
@@ -52,11 +52,11 @@ self.addEventListener('push', (event) => {
   }
 
   const options = {
-    title: notificationData.title || 'DevPulse',
+    title: notificationData.title || 'Colabify',
     body: notificationData.body || 'You have a new notification',
     icon: notificationData.icon || '/icons/icon-192x192.svg',
     badge: notificationData.badge || '/icons/icon-72x72.svg',
-    tag: notificationData.tag || 'devpulse-notification',
+    tag: notificationData.tag || 'Colabify-notification',
     data: notificationData.data || {},
     actions: notificationData.actions || [
       {

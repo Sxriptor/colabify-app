@@ -142,7 +142,7 @@ export default function AuthCallbackPage() {
           <p className="text-gray-600">{message}</p>
           {!isLoading && (
             <p className="text-sm text-gray-500 mt-4">
-              You can close this window and return to the DevPulse app.
+              You can close this window and return to the Colabify app.
             </p>
           )}
         </div>

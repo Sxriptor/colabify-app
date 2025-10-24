@@ -15,7 +15,7 @@ export async function POST(request: Request) {
         recipientEmail: email,
         recipientName: 'Test User',
         projectName: 'Test Project',
-        inviterName: 'DevPulse Team',
+        inviterName: 'Colabify Team',
         inviteUrl: 'https://colabify.xyz/signup?invitation=test-123'
       })
 

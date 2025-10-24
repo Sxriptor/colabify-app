@@ -73,10 +73,10 @@ export function PWAInstallPrompt() {
         </div>
         <div className="flex-1">
           <h3 className="text-sm font-medium text-gray-900 mb-1">
-            Install DevPulse
+            Install Colabify
           </h3>
           <p className="text-sm text-gray-600 mb-3">
-            Install DevPulse as an app for quick access and push notifications.
+            Install Colabify as an app for quick access and push notifications.
           </p>
           <div className="flex gap-2">
             <button

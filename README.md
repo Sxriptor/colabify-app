@@ -1,6 +1,6 @@
-# DevPulse
+# Colabify
 
-DevPulse is a lightweight SaaS platform that helps development teams stay informed about GitHub repository activity across multiple projects. The platform provides clean, project-scoped notifications delivered via email, eliminating the noise of GitHub's default notification system.
+Colabify is a lightweight SaaS platform that helps development teams stay informed about GitHub repository activity across multiple projects. The platform provides clean, project-scoped notifications delivered via email, eliminating the noise of GitHub's default notification system.
 
 ## Features
 
@@ -75,7 +75,7 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 ## Project Structure
 
 ```
-devpulse/
+Colabify/
 ├── src/
 │   ├── app/                 # Next.js App Router pages
 │   ├── components/          # React components

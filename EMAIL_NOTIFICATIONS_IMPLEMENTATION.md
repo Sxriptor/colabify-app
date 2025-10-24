@@ -66,8 +66,8 @@ Authorization: Bearer <supabase-service-role-key>
 ### Email Template Requirements
 
 **Subject Line Format:**
-- `[DevPulse] {notification.title}`
-- Example: `[DevPulse] Sxriptor pushed to main`
+- `[Colabify] {notification.title}`
+- Example: `[Colabify] Sxriptor pushed to main`
 
 **Email Content:**
 - **HTML Template** with your branding
@@ -172,9 +172,9 @@ export default async function handler(req, res) {
 
     // Send email
     await transporter.sendMail({
-      from: `"DevPulse" <${process.env.SMTP_NOTIFY_USER}>`,
+      from: `"Colabify" <${process.env.SMTP_NOTIFY_USER}>`,
       to: user.email,
-      subject: `[DevPulse] ${notification.title}`,
+      subject: `[Colabify] ${notification.title}`,
       html: emailHtml,
     });
 
@@ -196,7 +196,7 @@ function generateEmailTemplate(notification, user) {
     <html>
     <head>
       <meta charset="utf-8">
-      <title>DevPulse Notification</title>
+      <title>Colabify Notification</title>
     </head>
     <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
       <div style="background: #f8f9fa; padding: 20px; border-radius: 8px;">
@@ -219,13 +219,13 @@ function generateEmailTemplate(notification, user) {
           <a href="https://colabify.xyz/inbox" 
              style="background: #007bff; color: white; padding: 10px 20px; 
                     text-decoration: none; border-radius: 4px; display: inline-block;">
-            View in DevPulse
+            View in Colabify
           </a>
         </div>
         
         <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
         <p style="color: #999; font-size: 12px;">
-          You're receiving this because you have email notifications enabled in DevPulse.
+          You're receiving this because you have email notifications enabled in Colabify.
           <a href="https://colabify.xyz/settings">Manage notification preferences</a>
         </p>
       </div>
