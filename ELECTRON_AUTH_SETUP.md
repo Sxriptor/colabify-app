@@ -3,7 +3,7 @@
 ## ✅ Completed Implementation
 
 ### 1. Protocol Registration
-- ✅ Updated from `devpulse://` to `colabify://` protocol
+- ✅ Updated from `Colabify://` to `colabify://` protocol
 - ✅ Protocol registration in main process before app ready
 - ✅ Cross-platform deep link handling (macOS, Windows, Linux)
 

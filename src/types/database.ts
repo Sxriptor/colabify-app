@@ -1,4 +1,4 @@
-// Database type definitions for DevPulse
+// Database type definitions for Colabify
 
 export interface User {
   id: string

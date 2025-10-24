@@ -47,8 +47,8 @@
 5. Electron receives both tokens
    ↓
 6. Stores in macOS Keychain:
-   - DevPulse/auth-token → Session token
-   - DevPulse/github-token → GitHub token
+   - Colabify/auth-token → Session token
+   - Colabify/github-token → GitHub token
    ↓
 7. React components can now access GitHub API
 ```

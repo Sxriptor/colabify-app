@@ -92,7 +92,7 @@ class AuthManager {
                 <head><title>Authentication Successful</title></head>
                 <body style="font-family: system-ui; text-align: center; padding: 50px;">
                   <h2>✅ Authentication Successful!</h2>
-                  <p>You can now close this window and return to DevPulse.</p>
+                  <p>You can now close this window and return to Colabify.</p>
                   <script>
                     setTimeout(() => window.close(), 2000);
                   </script>

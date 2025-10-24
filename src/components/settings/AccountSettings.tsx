@@ -359,7 +359,7 @@ export function AccountSettings() {
                 <ol className="text-sm text-blue-800 space-y-1 list-decimal list-inside">
                   <li>Go to <a href="https://github.com/settings/tokens" target="_blank" rel="noopener noreferrer" className="underline">GitHub Settings → Personal Access Tokens (Classic)</a></li>
                   <li>Click "Generate new token (classic)"</li>
-                  <li>Give it a name (e.g., "DevPulse API")</li>
+                  <li>Give it a name (e.g., "Colabify API")</li>
                   <li>Select the <strong>repo</strong> scope (full control of private repositories)</li>
                   <li>Click "Generate token" and copy it</li>
                 </ol>

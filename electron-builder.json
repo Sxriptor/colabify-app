@@ -4,7 +4,10 @@
   "protocols": [
     {
       "name": "Colabify",
-      "schemes": ["colabify", "devpulse"]
+      "schemes": [
+        "colabify",
+        "Colabify"
+      ]
     }
   ],
   "directories": {
@@ -55,11 +58,9 @@
       }
     ],
     "icon": "build/icon.icns",
-    "hardenedRuntime": true,
+    "hardenedRuntime": false,
     "gatekeeperAssess": false,
-    "entitlements": "build/entitlements.mac.plist",
-    "entitlementsInherit": "build/entitlements.mac.plist",
-    "extendInfo": "build/Info.plist",
+    "identity": null,
     "artifactName": "Colabify-Setup.${ext}"
   },
   "win": {
@@ -116,5 +117,7 @@
     "createDesktopShortcut": true,
     "createStartMenuShortcut": true
   },
-  "publish": null
+  "publish": null,
+  "afterSign": null,
+  "forceCodeSigning": false
 }

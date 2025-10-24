@@ -1,6 +1,6 @@
 'use client'
 
-// Push notification utilities for DevPulse
+// Push notification utilities for Colabify
 
 export interface NotificationPayload {
   title: string
@@ -235,7 +235,7 @@ export class PushNotificationManager {
       body: payload.body,
       icon: payload.icon || '/icons/icon-192x192.svg',
       badge: payload.badge || '/icons/icon-72x72.svg',
-      tag: payload.tag || 'devpulse-local',
+      tag: payload.tag || 'Colabify-local',
       data: payload.data || {},
       requireInteraction: false,
       silent: false

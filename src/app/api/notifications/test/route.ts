@@ -21,8 +21,8 @@ export async function POST(request: Request) {
       },
       body: JSON.stringify({
         userId: user.id,
-        title: 'DevPulse Test Notification',
-        body: 'This is a test notification from DevPulse! 🚀',
+        title: 'Colabify Test Notification',
+        body: 'This is a test notification from Colabify! 🚀',
         url: '/dashboard',
         data: {
           test: true,

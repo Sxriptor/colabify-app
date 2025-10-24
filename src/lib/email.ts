@@ -27,7 +27,7 @@ export function generateInvitationEmailTemplate(data: InvitationEmailData): Emai
       </head>
       <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
         <div style="background: #f8f9fa; padding: 30px; border-radius: 8px; margin-bottom: 30px;">
-          <h1 style="color: #2563eb; margin: 0; font-size: 24px;">DevPulse</h1>
+          <h1 style="color: #2563eb; margin: 0; font-size: 24px;">Colabify</h1>
         </div>
         
         <div style="background: white; padding: 30px; border-radius: 8px; border: 1px solid #e5e7eb;">
@@ -35,43 +35,43 @@ export function generateInvitationEmailTemplate(data: InvitationEmailData): Emai
           
           <p>Hi${recipientName ? ` ${recipientName}` : ''},</p>
           
-          <p><strong>${inviterName}</strong> has invited you to join the <strong>${projectName}</strong> project on DevPulse.</p>
+          <p><strong>${inviterName}</strong> has invited you to join the <strong>${projectName}</strong> project on Colabify.</p>
           
-          <p>DevPulse helps development teams stay informed about GitHub repository activity with clean, project-scoped notifications delivered via email.</p>
+          <p>Colabify helps development teams stay informed about GitHub repository activity with clean, project-scoped notifications delivered via email.</p>
           
           <div style="text-align: center; margin: 30px 0;">
             <a href="${inviteUrl}" style="background: #2563eb; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: 500; display: inline-block;">Accept Invitation</a>
           </div>
           
-          <p style="color: #6b7280; font-size: 14px;">If you don't have a DevPulse account yet, you'll be able to create one when you click the link above.</p>
+          <p style="color: #6b7280; font-size: 14px;">If you don't have a Colabify account yet, you'll be able to create one when you click the link above.</p>
           
           <p style="color: #6b7280; font-size: 14px;">This invitation will expire in 7 days.</p>
         </div>
         
         <div style="text-align: center; margin-top: 30px; color: #6b7280; font-size: 12px;">
-          <p>This email was sent by DevPulse. If you didn't expect this invitation, you can safely ignore this email.</p>
+          <p>This email was sent by Colabify. If you didn't expect this invitation, you can safely ignore this email.</p>
         </div>
       </body>
     </html>
   `
 
   const textContent = `
-DevPulse Invitation
+Colabify Invitation
 
 Hi${recipientName ? ` ${recipientName}` : ''},
 
-${inviterName} has invited you to join the ${projectName} project on DevPulse.
+${inviterName} has invited you to join the ${projectName} project on Colabify.
 
-DevPulse helps development teams stay informed about GitHub repository activity with clean, project-scoped notifications delivered via email.
+Colabify helps development teams stay informed about GitHub repository activity with clean, project-scoped notifications delivered via email.
 
 Accept your invitation by visiting: ${inviteUrl}
 
-If you don't have a DevPulse account yet, you'll be able to create one when you click the link above.
+If you don't have a Colabify account yet, you'll be able to create one when you click the link above.
 
 This invitation will expire in 7 days.
 
 ---
-This email was sent by DevPulse. If you didn't expect this invitation, you can safely ignore this email.
+This email was sent by Colabify. If you didn't expect this invitation, you can safely ignore this email.
   `
 
   return { subject, htmlContent, textContent }
@@ -151,7 +151,7 @@ export async function sendInvitationEmail(data: InvitationEmailData): Promise<bo
 
     // Prepare email data
     const emailData = {
-      from: `DevPulse Invitations <${process.env.SMTP_INVITE_USER}>`,
+      from: `Colabify Invitations <${process.env.SMTP_INVITE_USER}>`,
       to: data.recipientEmail,
       subject: template.subject,
       html: template.htmlContent,
@@ -217,11 +217,11 @@ export function generateNotificationEmailTemplate(data: NotificationEmailData): 
       <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>DevPulse ${isDigest ? 'Digest' : 'Notification'}</title>
+        <title>Colabify ${isDigest ? 'Digest' : 'Notification'}</title>
       </head>
       <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
         <div style="background: #f8f9fa; padding: 30px; border-radius: 8px; margin-bottom: 30px;">
-          <h1 style="color: #2563eb; margin: 0; font-size: 24px;">DevPulse</h1>
+          <h1 style="color: #2563eb; margin: 0; font-size: 24px;">Colabify</h1>
         </div>
         
         <div style="background: white; padding: 30px; border-radius: 8px; border: 1px solid #e5e7eb;">
@@ -248,19 +248,19 @@ export function generateNotificationEmailTemplate(data: NotificationEmailData): 
           </div>
           
           <p style="color: #6b7280; font-size: 14px; margin-top: 30px;">
-            You're receiving this because you're a member of the ${projectName} project on DevPulse.
+            You're receiving this because you're a member of the ${projectName} project on Colabify.
           </p>
         </div>
         
         <div style="text-align: center; margin-top: 30px; color: #6b7280; font-size: 12px;">
-          <p>This email was sent by DevPulse. To manage your notification preferences, visit your project settings.</p>
+          <p>This email was sent by Colabify. To manage your notification preferences, visit your project settings.</p>
         </div>
       </body>
     </html>
   `
 
   const textContent = `
-DevPulse ${isDigest ? 'Digest' : 'Notification'}
+Colabify ${isDigest ? 'Digest' : 'Notification'}
 
 Hi${recipientName ? ` ${recipientName}` : ''},
 
@@ -274,10 +274,10 @@ ${notifications.map(notification => `
   ${notification.repository} • ${new Date(notification.timestamp).toLocaleString()}
 `).join('\n')}
 
-You're receiving this because you're a member of the ${projectName} project on DevPulse.
+You're receiving this because you're a member of the ${projectName} project on Colabify.
 
 ---
-This email was sent by DevPulse. To manage your notification preferences, visit your project settings.
+This email was sent by Colabify. To manage your notification preferences, visit your project settings.
   `
 
   return { subject, htmlContent, textContent }
@@ -323,7 +323,7 @@ export async function sendNotificationEmail(data: NotificationEmailData): Promis
 
     // Prepare email data
     const emailData = {
-      from: `DevPulse Notifications <${process.env.SMTP_NOTIFY_USER}>`,
+      from: `Colabify Notifications <${process.env.SMTP_NOTIFY_USER}>`,
       to: data.recipientEmail,
       subject: template.subject,
       html: template.htmlContent,

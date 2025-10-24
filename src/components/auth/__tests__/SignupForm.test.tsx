@@ -22,7 +22,7 @@ describe('SignupForm', () => {
     render(<SignupForm />)
     
     expect(screen.getByRole('button', { name: /sign up with github/i })).toBeInTheDocument()
-    expect(screen.getByText(/create your devpulse account using github/i)).toBeInTheDocument()
+    expect(screen.getByText(/create your Colabify account using github/i)).toBeInTheDocument()
   })
 
   it('handles GitHub OAuth signup successfully', async () => {
@@ -70,7 +70,7 @@ describe('SignupForm', () => {
   it('displays privacy information', () => {
     render(<SignupForm />)
     
-    expect(screen.getByText(/by signing up, you agree to let devpulse access/i)).toBeInTheDocument()
+    expect(screen.getByText(/by signing up, you agree to let Colabify access/i)).toBeInTheDocument()
     expect(screen.getByText(/we only read repository activity and never modify/i)).toBeInTheDocument()
   })
 

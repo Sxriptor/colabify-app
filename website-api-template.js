@@ -47,9 +47,9 @@ export default async function handler(req, res) {
 
     // Send email
     await transporter.sendMail({
-      from: `"DevPulse" <${process.env.SMTP_NOTIFY_USER}>`,
+      from: `"Colabify" <${process.env.SMTP_NOTIFY_USER}>`,
       to: user.email,
-      subject: `[DevPulse] ${title}`,
+      subject: `[Colabify] ${title}`,
       html: emailHtml,
     });
 
@@ -81,7 +81,7 @@ function generateSimpleEmail(title, message, data, user) {
       
       <p style="margin-top: 20px;">
         <a href="https://colabify.xyz/inbox" style="background: #007bff; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">
-          View in DevPulse
+          View in Colabify
         </a>
       </p>
       

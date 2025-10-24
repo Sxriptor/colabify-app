@@ -1,6 +1,6 @@
-# DevPulse - Electron App
+# Colabify - Electron App
 
-This is the Electron version of DevPulse, a clean GitHub notifications app. The app works cross-platform on macOS, Windows, and Linux.
+This is the Electron version of Colabify, a clean GitHub notifications app. The app works cross-platform on macOS, Windows, and Linux.
 
 ## Development
 
@@ -54,9 +54,9 @@ npm run electron:build:linux
 
 Built applications will be in the `dist/` directory:
 
-- **macOS**: `dist/DevPulse-{version}.dmg` and `dist/DevPulse-{version}-mac.zip`
-- **Windows**: `dist/DevPulse Setup {version}.exe` and `dist/DevPulse {version}.exe` (portable)
-- **Linux**: `dist/DevPulse-{version}.AppImage`, `dist/devpulse_{version}_amd64.deb`, `dist/devpulse-{version}.x86_64.rpm`
+- **macOS**: `dist/Colabify-{version}.dmg` and `dist/Colabify-{version}-mac.zip`
+- **Windows**: `dist/Colabify Setup {version}.exe` and `dist/Colabify {version}.exe` (portable)
+- **Linux**: `dist/Colabify-{version}.AppImage`, `dist/Colabify_{version}_amd64.deb`, `dist/Colabify-{version}.x86_64.rpm`
 
 ## Architecture
 
@@ -91,7 +91,7 @@ The Electron app uses a secure OAuth flow with GitHub:
 2. The OAuth URL opens in the user's default browser with `source=electron` parameter
 3. User authenticates with GitHub in their browser
 4. After authentication, the browser redirects to `https://colabify.xyz/auth/callback?source=electron&code=...`
-5. The web callback page detects the `source=electron` parameter, exchanges the code for tokens, and redirects to `devpulse://auth/callback#access_token=...`
+5. The web callback page detects the `source=electron` parameter, exchanges the code for tokens, and redirects to `Colabify://auth/callback#access_token=...`
 6. The Electron app receives the callback via deep linking and completes the authentication
 
 This flow ensures:
@@ -112,7 +112,7 @@ Without these configured, the OAuth flow will fail.
 
 ### Deep Linking Setup
 
-The app registers the `devpulse://` protocol on all platforms:
+The app registers the `Colabify://` protocol on all platforms:
 
 - **macOS**: Registered via `electron-builder.json` protocols configuration
 - **Windows**: Registered via NSIS installer

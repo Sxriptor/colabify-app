@@ -14,7 +14,7 @@ describe('Email Templates', () => {
 
       const template = generateInvitationEmailTemplate(data)
 
-      expect(template.subject).toBe('You\'ve been invited to join Test Project on DevPulse')
+      expect(template.subject).toBe('You\'ve been invited to join Test Project on Colabify')
       expect(template.htmlContent).toContain('Hi John Doe,')
       expect(template.htmlContent).toContain('Jane Smith')
       expect(template.htmlContent).toContain('Test Project')

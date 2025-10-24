@@ -178,7 +178,7 @@ export function usePushNotifications(): UsePushNotificationsReturn {
 
     try {
       const payload: NotificationPayload = {
-        title: 'DevPulse Test Notification',
+        title: 'Colabify Test Notification',
         body: 'This is a test notification to verify everything is working!',
         url: '/dashboard',
         data: { test: true }

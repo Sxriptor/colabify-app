@@ -57,7 +57,7 @@ export async function POST(request: Request) {
       body,
       icon: '/icons/icon-192x192.svg',
       badge: '/icons/icon-72x72.svg',
-      tag: 'devpulse-notification',
+      tag: 'Colabify-notification',
       data: {
         url: url || '/dashboard',
         ...data
