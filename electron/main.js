@@ -48,9 +48,9 @@ const fetch = globalThis.fetch;
 // Initialize AuthManager
 const authManager = new AuthManager();
 
-// Initialize Auto-updater Service
-const AutoUpdaterService = require('./services/AutoUpdaterService');
-const autoUpdaterService = new AutoUpdaterService();
+// Manual Update Service for macOS (due to code signing issues)
+const ManualUpdateService = require('./services/ManualUpdateService');
+const manualUpdateService = new ManualUpdateService();
 
 let mainWindow;
 let tray = null; // System tray instance
@@ -617,8 +617,8 @@ async function createWindow() {
     // Initialize Git monitoring backend after window is ready
     initializeGitMonitoring(mainWindow);
 
-    // Initialize auto-updater after window is ready
-    autoUpdaterService.initialize(mainWindow);
+    // Initialize manual update service after window is ready
+    manualUpdateService.initialize(mainWindow);
   });
 
   // Prevent navigation to external URLs (for OAuth flow)
@@ -1022,8 +1022,8 @@ ipcMain.handle('api:call', async (event, endpoint, options = {}) => {
 // Setup notification IPC handlers
 setupNotificationIPC();
 
-// Setup auto-updater IPC handlers
-setupAutoUpdaterIPC();
+// Setup manual update IPC handlers
+setupManualUpdateIPC();
 
 console.log('✅ All IPC handlers registered');
 
@@ -1145,15 +1145,15 @@ function setupNotificationIPC() {
   console.log('✅ Notification IPC handlers setup complete');
 }
 
-// Setup auto-updater IPC handlers
-function setupAutoUpdaterIPC() {
-  console.log('🔄 Setting up Auto-updater IPC handlers');
+// Setup manual update IPC handlers
+function setupManualUpdateIPC() {
+  console.log('🔄 Setting up Manual Update IPC handlers');
 
-  // Check for updates
+  // Check for updates manually
   ipcMain.handle('updater:check-for-updates', async () => {
     try {
-      console.log('🔍 Checking for updates...');
-      await autoUpdaterService.checkForUpdates();
+      console.log('🔍 Checking for updates manually...');
+      await manualUpdateService.checkForUpdates();
       return { success: true };
     } catch (error) {
       console.error('Error checking for updates:', error);
@@ -1161,31 +1161,19 @@ function setupAutoUpdaterIPC() {
     }
   });
 
-  // Download update
-  ipcMain.handle('updater:download-update', async () => {
+  // Open download page
+  ipcMain.handle('updater:open-download', async () => {
     try {
-      console.log('📥 Starting update download...');
-      await autoUpdaterService.downloadUpdate();
+      console.log('🌐 Opening download page...');
+      manualUpdateService.openDownloadPage();
       return { success: true };
     } catch (error) {
-      console.error('Error downloading update:', error);
+      console.error('Error opening download page:', error);
       return { success: false, error: error.message };
     }
   });
 
-  // Quit and install
-  ipcMain.handle('updater:quit-and-install', async () => {
-    try {
-      console.log('🔄 Quitting and installing update...');
-      autoUpdaterService.quitAndInstall();
-      return { success: true };
-    } catch (error) {
-      console.error('Error installing update:', error);
-      return { success: false, error: error.message };
-    }
-  });
-
-  console.log('✅ Auto-updater IPC handlers setup complete');
+  console.log('✅ Manual Update IPC handlers setup complete');
 }
 
 // Function to initialize Git monitoring (called after window is ready)
@@ -1428,12 +1416,12 @@ app.on('before-quit', async (event) => {
       }
     }
 
-    // Cleanup auto-updater
-    if (autoUpdaterService) {
-      console.log('🔄 Cleaning up auto-updater...');
+    // Cleanup manual update service
+    if (manualUpdateService) {
+      console.log('🔄 Cleaning up manual update service...');
       try {
-        if (typeof autoUpdaterService.cleanup === 'function') {
-          autoUpdaterService.cleanup();
+        if (typeof manualUpdateService.cleanup === 'function') {
+          manualUpdateService.cleanup();
         }
       } catch (err) {
         console.error('Error cleaning up auto-updater:', err);

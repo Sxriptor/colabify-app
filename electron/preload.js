@@ -140,45 +140,29 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return ipcRenderer.invoke(channel, ...args);
   },
 
-  // Auto-updater API
+  // Manual Update API (for macOS)
   checkForUpdates: () => {
     console.log('🔍 PRELOAD: checkForUpdates called');
     return ipcRenderer.invoke('updater:check-for-updates');
   },
-  downloadUpdate: () => {
-    console.log('📥 PRELOAD: downloadUpdate called');
-    return ipcRenderer.invoke('updater:download-update');
+  openDownload: () => {
+    console.log('🌐 PRELOAD: openDownload called');
+    return ipcRenderer.invoke('updater:open-download');
   },
-  quitAndInstall: () => {
-    console.log('🔄 PRELOAD: quitAndInstall called');
-    return ipcRenderer.invoke('updater:quit-and-install');
-  },
-  onUpdateEvent: (callback) => {
-    // Listen for all updater events
-    const events = [
-      'updater:update-checking',
-      'updater:update-available',
-      'updater:update-not-available',
-      'updater:update-download-progress',
-      'updater:update-downloaded',
-      'updater:update-error'
-    ];
-
-    events.forEach(event => {
-      ipcRenderer.on(event, (_, data) => {
-        const eventName = event.replace('updater:update-', '');
-        console.log(`🎧 PRELOAD: Update event received: ${eventName}`, data);
-        callback(eventName, data);
-      });
+  // Manual update event listeners
+  on: (event, callback) => {
+    console.log(`🎧 PRELOAD: Setting up listener for ${event}`);
+    ipcRenderer.on(event, (_, data) => {
+      console.log(`🎧 PRELOAD: Event received: ${event}`, data);
+      callback(data);
     });
   },
-  removeUpdateListeners: () => {
-    console.log('🧹 PRELOAD: Removing update event listeners');
-    ipcRenderer.removeAllListeners('updater:update-checking');
-    ipcRenderer.removeAllListeners('updater:update-available');
-    ipcRenderer.removeAllListeners('updater:update-not-available');
-    ipcRenderer.removeAllListeners('updater:update-download-progress');
-    ipcRenderer.removeAllListeners('updater:update-downloaded');
-    ipcRenderer.removeAllListeners('updater:update-error');
+  removeListener: (event, callback) => {
+    console.log(`🧹 PRELOAD: Removing listener for ${event}`);
+    ipcRenderer.removeListener(event, callback);
+  },
+  removeAllListeners: (event) => {
+    console.log(`🧹 PRELOAD: Removing all listeners for ${event}`);
+    ipcRenderer.removeAllListeners(event);
   }
 });

@@ -3,7 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/lib/auth/context";
 import { GlobalFloatingMenu } from "@/components/ui/GlobalFloatingMenu";
-import { UpdateNotification } from "@/components/ui/UpdateNotification";
+import ManualUpdateNotification from "@/components/ui/ManualUpdateNotification";
 import { ServiceWorkerManager } from "@/components/ServiceWorkerManager";
 import { TrayNavigationListener } from "@/components/TrayNavigationListener";
 
@@ -46,7 +46,7 @@ export default function RootLayout({
           <ServiceWorkerManager />
           {children}
           <GlobalFloatingMenu />
-          <UpdateNotification />
+          <ManualUpdateNotification />
           <TrayNavigationListener />
         </AuthProvider>
       </body>
