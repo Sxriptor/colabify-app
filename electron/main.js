@@ -1204,74 +1204,100 @@ app.on('window-all-closed', () => {
 
 // Cleanup Git monitoring backend, notification service, auto-updater, tray, and Next.js server on app quit
 app.on('before-quit', async (event) => {
-  let needsCleanup = false;
-
-  if (tray) {
-    needsCleanup = true;
+  // Only do cleanup once
+  if (global.isCleaningUp) {
+    return;
   }
+  
+  global.isCleaningUp = true;
+  event.preventDefault();
 
-  if (gitMonitoringBackend && gitMonitoringBackend.isInitialized()) {
-    needsCleanup = true;
-  }
+  console.log('🧹 Starting cleanup...');
 
-  if (notificationService) {
-    needsCleanup = true;
-  }
-
-  if (autoUpdaterService) {
-    needsCleanup = true;
-  }
-
-  if (global.nextServerProcess) {
-    needsCleanup = true;
-  }
-
-  if (needsCleanup) {
-    event.preventDefault();
-
-    try {
-      // Cleanup system tray
-      if (tray) {
-        console.log('🔔 Destroying system tray...');
+  try {
+    // Cleanup system tray
+    if (tray) {
+      console.log('🔔 Destroying system tray...');
+      try {
         tray.destroy();
         tray = null;
+      } catch (err) {
+        console.error('Error destroying tray:', err);
       }
+    }
 
-      // Cleanup Next.js server
-      if (global.nextServerProcess) {
-        console.log('🛑 Stopping Next.js server...');
+    // Cleanup Next.js server
+    if (global.nextServerProcess) {
+      console.log('🛑 Stopping Next.js server...');
+      try {
         global.nextServerProcess.kill();
         global.nextServerProcess = null;
+      } catch (err) {
+        console.error('Error killing Next.js server:', err);
       }
+    }
 
-      // Cleanup notification service
-      if (notificationService) {
-        console.log('🔔 Cleaning up notification service...');
+    // Cleanup notification service
+    if (notificationService) {
+      console.log('🔔 Cleaning up notification service...');
+      try {
         notificationService.destroy();
         notificationService = null;
+      } catch (err) {
+        console.error('Error cleaning up notification service:', err);
       }
-
-      // Cleanup Git monitoring
-      if (gitMonitoringBackend && gitMonitoringBackend.isInitialized()) {
-        console.log('🧹 Cleaning up Git monitoring backend...');
-        await gitMonitoringBackend.cleanup();
-      }
-
-      // Cleanup auto-updater
-      if (autoUpdaterService) {
-        console.log('🔄 Cleaning up auto-updater...');
-        autoUpdaterService.cleanup();
-      }
-
-      app.quit();
-    } catch (error) {
-      console.error('❌ Error during cleanup:', error);
-      app.quit();
     }
+
+    // Cleanup Git monitoring - safely check if methods exist
+    if (gitMonitoringBackend) {
+      console.log('🧹 Cleaning up Git monitoring backend...');
+      try {
+        if (typeof gitMonitoringBackend.cleanup === 'function') {
+          await gitMonitoringBackend.cleanup();
+        } else if (typeof gitMonitoringBackend.destroy === 'function') {
+          await gitMonitoringBackend.destroy();
+        }
+        gitMonitoringBackend = null;
+      } catch (err) {
+        console.error('Error cleaning up Git monitoring:', err);
+      }
+    }
+
+    // Cleanup auto-updater
+    if (autoUpdaterService) {
+      console.log('🔄 Cleaning up auto-updater...');
+      try {
+        if (typeof autoUpdaterService.cleanup === 'function') {
+          autoUpdaterService.cleanup();
+        }
+      } catch (err) {
+        console.error('Error cleaning up auto-updater:', err);
+      }
+    }
+
+    console.log('✅ Cleanup complete, quitting app...');
+  } catch (error) {
+    console.error('❌ Error during cleanup:', error);
+  } finally {
+    // Force quit the app after cleanup with a small delay to ensure async operations complete
+    global.isCleaningUp = false;
+    setTimeout(() => {
+      console.log('👋 Forcing app exit...');
+      app.exit(0);
+      // If app.exit doesn't work, force process exit
+      setTimeout(() => {
+        process.exit(0);
+      }, 500);
+    }, 100);
   }
 });
 
 // Handle any uncaught exceptions
 process.on('uncaughtException', (error) => {
   console.error('Uncaught Exception:', error);
+});
+
+// Handle unhandled promise rejections
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
 });
