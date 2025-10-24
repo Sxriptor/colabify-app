@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Notification Permissions</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .test-section {
+            background: #f5f5f5;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+        }
+        button {
+            background: #007AFF;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #0056CC;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        .granted { background: #d4edda; color: #155724; }
+        .denied { background: #f8d7da; color: #721c24; }
+        .default { background: #fff3cd; color: #856404; }
+    </style>
+</head>
+<body>
+    <h1>🔔 Notification Permission Test</h1>
+    
+    <div class="test-section">
+        <h2>Current Status</h2>
+        <div id="status" class="status">Checking...</div>
+        <button onclick="checkPermission()">Check Permission</button>
+        <button onclick="requestPermission()">Request Permission</button>
+        <button onclick="testNotification()">Test Notification</button>
+    </div>
+
+    <div class="test-section">
+        <h2>Platform Info</h2>
+        <div id="platform-info">Loading...</div>
+    </div>
+
+    <div class="test-section">
+        <h2>Instructions for macOS</h2>
+        <p>If notifications are denied:</p>
+        <ol>
+            <li>Open <strong>System Preferences</strong></li>
+            <li>Go to <strong>Notifications & Focus</strong></li>
+            <li>Find <strong>"Colabify"</strong> in the list</li>
+            <li>Enable <strong>"Allow Notifications"</strong></li>
+            <li>Restart the app and try again</li>
+        </ol>
+        <button onclick="openSystemPrefs()">Open System Preferences</button>
+    </div>
+
+    <script>
+        function updateStatus(text, className = '') {
+            const statusEl = document.getElementById('status');
+            statusEl.textContent = text;
+            statusEl.className = `status ${className}`;
+        }
+
+        function updatePlatformInfo() {
+            const info = document.getElementById('platform-info');
+            const isElectron = typeof window.electronAPI !== 'undefined';
+            
+            info.innerHTML = `
+                <strong>Environment:</strong> ${isElectron ? 'Electron' : 'Web Browser'}<br>
+                <strong>Platform:</strong> ${navigator.platform}<br>
+                <strong>User Agent:</strong> ${navigator.userAgent}<br>
+                <strong>Notification Support:</strong> ${'Notification' in window ? 'Yes' : 'No'}
+            `;
+        }
+
+        async function checkPermission() {
+            updateStatus('Checking permission...', 'default');
+            
+            if (typeof window.electronAPI !== 'undefined') {
+                try {
+                    const result = await window.electronAPI.checkNotificationPermission();
+                    console.log('Permission check result:', result);
+                    
+                    if (result.status === 'granted') {
+                        updateStatus('✅ Notifications are enabled', 'granted');
+                    } else if (result.needsSystemSettings) {
+                        updateStatus('❌ Notifications disabled in System Preferences', 'denied');
+                    } else {
+                        updateStatus(`❌ Notifications denied: ${result.reason || 'unknown'}`, 'denied');
+                    }
+                } catch (error) {
+                    console.error('Error checking permission:', error);
+                    updateStatus('❌ Error checking permission', 'denied');
+                }
+            } else {
+                // Web environment
+                if ('Notification' in window) {
+                    const permission = Notification.permission;
+                    updateStatus(`Web permission: ${permission}`, permission);
+                } else {
+                    updateStatus('❌ Notifications not supported', 'denied');
+                }
+            }
+        }
+
+        async function requestPermission() {
+            updateStatus('Requesting permission...', 'default');
+            
+            if (typeof window.electronAPI !== 'undefined') {
+                try {
+                    const result = await window.electronAPI.requestNotificationPermission();
+                    console.log('Permission request result:', result);
+                    
+                    if (result.status === 'granted') {
+                        updateStatus('✅ Permission granted!', 'granted');
+                    } else if (result.needsSystemSettings) {
+                        updateStatus('❌ Please enable notifications in System Preferences', 'denied');
+                    } else {
+                        updateStatus(`❌ Permission denied: ${result.reason || 'unknown'}`, 'denied');
+                    }
+                } catch (error) {
+                    console.error('Error requesting permission:', error);
+                    updateStatus('❌ Error requesting permission', 'denied');
+                }
+            } else {
+                // Web environment
+                try {
+                    const permission = await Notification.requestPermission();
+                    updateStatus(`Web permission result: ${permission}`, permission);
+                } catch (error) {
+                    updateStatus('❌ Error requesting permission', 'denied');
+                }
+            }
+        }
+
+        async function testNotification() {
+            if (typeof window.electronAPI !== 'undefined') {
+                try {
+                    const result = await window.electronAPI.showNotification({
+                        title: 'Test Notification',
+                        body: 'This is a test notification from Colabify!'
+                    });
+                    
+                    if (result.success) {
+                        updateStatus('✅ Test notification sent!', 'granted');
+                    } else {
+                        updateStatus('❌ Failed to send notification', 'denied');
+                    }
+                } catch (error) {
+                    console.error('Error sending notification:', error);
+                    updateStatus('❌ Error sending notification', 'denied');
+                }
+            } else {
+                // Web environment
+                if (Notification.permission === 'granted') {
+                    new Notification('Test Notification', {
+                        body: 'This is a test notification from Colabify!',
+                        icon: '/icons/colabify.png'
+                    });
+                    updateStatus('✅ Test notification sent!', 'granted');
+                } else {
+                    updateStatus('❌ Permission not granted', 'denied');
+                }
+            }
+        }
+
+        function openSystemPrefs() {
+            if (typeof window.electronAPI !== 'undefined') {
+                window.electronAPI.openExternalUrl('x-apple.systempreferences:com.apple.preference.notifications');
+            } else {
+                alert('This feature is only available in the Electron app');
+            }
+        }
+
+        // Initialize
+        updatePlatformInfo();
+        checkPermission();
+    </script>
+</body>
+</html>

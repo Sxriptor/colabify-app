@@ -61,8 +61,9 @@ export class PushNotificationManager {
   // Get current permission status
   getPermissionStatus(): NotificationPermission {
     if (this.isElectron()) {
-      // Electron notifications are always granted
-      return 'granted'
+      // In Electron, we need to check the actual permission status
+      // This will be handled by the NotificationPermissionStatus component
+      return 'default'
     }
     return Notification.permission
   }
@@ -75,8 +76,8 @@ export class PushNotificationManager {
 
     // In Electron, use the electronAPI
     if (this.isElectron() && window.electronAPI) {
-      const permission = await window.electronAPI.requestNotificationPermission()
-      return permission
+      const result = await window.electronAPI.requestNotificationPermission()
+      return result.status as NotificationPermission
     }
 
     // In web, use the Notification API

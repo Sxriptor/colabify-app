@@ -6,6 +6,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Notification API
   showNotification: (data) => ipcRenderer.invoke('show-notification', data),
   requestNotificationPermission: () => ipcRenderer.invoke('request-notification-permission'),
+  checkNotificationPermission: () => ipcRenderer.invoke('check-notification-permission'),
 
   // OAuth / Browser API
   openExternalUrl: (url) => ipcRenderer.invoke('open-external-url', url),

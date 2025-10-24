@@ -758,14 +758,13 @@ ipcMain.handle('show-notification', async (event, { title, body, icon }) => {
 // Request notification permissions
 ipcMain.handle('request-notification-permission', async () => {
   if (!Notification.isSupported()) {
-    return 'denied';
+    return { status: 'denied', reason: 'not_supported' };
   }
   
   // On macOS, we need to explicitly request permission for signed apps
   if (process.platform === 'darwin') {
     try {
-      // For Electron apps, we can check if notifications are allowed
-      // by trying to create a test notification
+      // Try to create a test notification to check permissions
       const testNotification = new Notification({
         title: 'Colabify',
         body: 'Notifications are now enabled!',
@@ -773,15 +772,68 @@ ipcMain.handle('request-notification-permission', async () => {
       });
       
       // If we can create it, permissions are granted
-      return 'granted';
+      console.log('✅ macOS notification permissions granted');
+      return { status: 'granted' };
     } catch (error) {
-      console.error('Notification permission denied:', error);
-      return 'denied';
+      console.error('❌ macOS notification permission denied:', error);
+      
+      // Show dialog to guide user to enable notifications
+      const result = await dialog.showMessageBox(mainWindow, {
+        type: 'info',
+        title: 'Enable Notifications',
+        message: 'Colabify needs permission to show notifications',
+        detail: 'To enable notifications:\n\n1. Open System Preferences\n2. Go to Notifications & Focus\n3. Find "Colabify" in the list\n4. Enable "Allow Notifications"\n\nWould you like to open System Preferences now?',
+        buttons: ['Open System Preferences', 'Cancel'],
+        defaultId: 0,
+        cancelId: 1
+      });
+      
+      if (result.response === 0) {
+        // Open System Preferences to Notifications
+        shell.openExternal('x-apple.systempreferences:com.apple.preference.notifications');
+      }
+      
+      return { 
+        status: 'denied', 
+        reason: 'system_denied',
+        needsSystemSettings: true 
+      };
     }
   }
   
   // For other platforms, assume granted if supported
-  return 'granted';
+  return { status: 'granted' };
+});
+
+// Check notification permission status
+ipcMain.handle('check-notification-permission', async () => {
+  if (!Notification.isSupported()) {
+    return { status: 'denied', reason: 'not_supported' };
+  }
+  
+  if (process.platform === 'darwin') {
+    try {
+      // Try to create a silent test notification to check permissions
+      const testNotification = new Notification({
+        title: 'Permission Check',
+        body: 'Testing notification permissions',
+        silent: true
+      });
+      
+      // Don't show the test notification
+      testNotification.close();
+      
+      return { status: 'granted' };
+    } catch (error) {
+      return { 
+        status: 'denied', 
+        reason: 'system_denied',
+        needsSystemSettings: true 
+      };
+    }
+  }
+  
+  return { status: 'granted' };
 });
 
 // Open URL in external browser

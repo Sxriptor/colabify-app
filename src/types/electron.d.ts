@@ -2,7 +2,16 @@ declare global {
   interface Window {
     electronAPI?: {
       showNotification: (data: { title: string; body: string; icon?: string }) => Promise<{ success: boolean }>;
-      requestNotificationPermission: () => Promise<'granted' | 'denied'>;
+      requestNotificationPermission: () => Promise<{ 
+        status: 'granted' | 'denied'; 
+        reason?: 'not_supported' | 'system_denied';
+        needsSystemSettings?: boolean;
+      }>;
+      checkNotificationPermission: () => Promise<{ 
+        status: 'granted' | 'denied'; 
+        reason?: 'not_supported' | 'system_denied';
+        needsSystemSettings?: boolean;
+      }>;
       openExternalUrl: (url: string) => Promise<{ success: boolean }>;
       onAuthCallback: (callback: (url: string) => void) => void;
       removeAuthCallback: () => void;

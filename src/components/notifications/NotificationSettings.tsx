@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useNotificationPreferences } from '@/hooks/useNotificationPreferences'
 import { useAuth } from '@/lib/auth/context'
+import { NotificationPermissionStatus } from './NotificationPermissionStatus'
 
 export function NotificationSettings() {
   const { user } = useAuth()
@@ -31,10 +32,17 @@ export function NotificationSettings() {
       if (typeof window !== 'undefined' && (window as any).electronAPI) {
         try {
           // Request notification permission
-          const permission = await (window as any).electronAPI.requestNotificationPermission()
+          const permissionResult = await (window as any).electronAPI.requestNotificationPermission()
 
-          if (permission !== 'granted') {
-            console.warn('Notification permission denied')
+          if (permissionResult.status !== 'granted') {
+            console.warn('Notification permission denied:', permissionResult)
+            
+            if (permissionResult.needsSystemSettings) {
+              // Show user-friendly message for macOS
+              alert('Notifications are disabled in System Preferences.\n\nTo enable notifications:\n1. Open System Preferences\n2. Go to Notifications & Focus\n3. Find "Colabify" in the list\n4. Enable "Allow Notifications"\n\nThen try enabling notifications again.')
+            } else {
+              alert('Notification permission was denied. Please enable notifications in your system settings.')
+            }
             return
           }
 
@@ -51,6 +59,7 @@ export function NotificationSettings() {
           }
         } catch (error) {
           console.error('Failed to enable notifications:', error)
+          alert('Failed to enable notifications. Please try again.')
           return
         }
       }
@@ -92,6 +101,11 @@ export function NotificationSettings() {
         <div className="absolute right-0 mt-2 w-64 bg-white rounded-md shadow-lg border border-gray-200 z-50">
           <div className="p-4">
             <h3 className="text-sm font-medium text-gray-900 mb-3">Notification Settings</h3>
+            
+            {/* Permission Status */}
+            <div className="mb-4 pb-3 border-b border-gray-200">
+              <NotificationPermissionStatus />
+            </div>
             
             <div className="space-y-3">
               <div className="flex items-center justify-between">
