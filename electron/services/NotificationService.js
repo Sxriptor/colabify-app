@@ -423,16 +423,17 @@ class NotificationService {
   getIconForType(type) {
     const path = require('path');
     const fs = require('fs');
-    
+
     // Try different icon paths in order of preference
+    // PNG files work best for Windows notifications
     const iconPaths = [
-      path.join(__dirname, '../../build/icon.icns'),           // Production build
-      path.join(__dirname, '../../build/icon.png'),            // Production PNG fallback
-      path.join(__dirname, '../../public/icons/icon.icns'),    // Development ICNS
-      path.join(__dirname, '../../public/icons/icon-512x512.png'), // Development PNG
-      path.join(__dirname, '../../public/icons/colabify.png')  // Fallback PNG
+      path.join(__dirname, '../../build/icon.png'),            // Production PNG
+      path.join(__dirname, '../../public/icons/icon-192x192.png'), // Development PNG (better for notifications)
+      path.join(__dirname, '../../public/icons/colabify.png'), // Fallback PNG
+      path.join(__dirname, '../../build/icon.icns'),           // macOS icon (production)
+      path.join(__dirname, '../../public/icons/icon.icns')     // macOS icon (development)
     ];
-    
+
     // Find the first icon that exists
     for (const iconPath of iconPaths) {
       if (fs.existsSync(iconPath)) {
@@ -440,7 +441,7 @@ class NotificationService {
         return iconPath;
       }
     }
-    
+
     // Ultimate fallback - no icon
     console.warn('⚠️ No notification icon found, using default');
     return null;
