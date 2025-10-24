@@ -1,12 +1,41 @@
 const path = require('path');
+const fs = require('fs');
 
-// Load environment variables
-require('dotenv').config({ path: path.join(__dirname, '../.env.local') });
+// Load environment variables with better path resolution
+const envPath = path.join(__dirname, '../.env.local');
+console.log('🔧 Loading environment from:', envPath);
+console.log('🔧 Environment file exists:', fs.existsSync(envPath));
+
+if (fs.existsSync(envPath)) {
+  require('dotenv').config({ path: envPath });
+  console.log('✅ Environment file loaded');
+} else {
+  console.log('⚠️ Environment file not found, trying alternative paths...');
+  
+  // Try alternative paths for different build contexts
+  const altPaths = [
+    path.join(process.cwd(), '.env.local'),
+    path.join(__dirname, '../../.env.local'),
+    path.join(process.resourcesPath, '.env.local')
+  ];
+  
+  for (const altPath of altPaths) {
+    console.log('🔍 Trying:', altPath);
+    if (fs.existsSync(altPath)) {
+      require('dotenv').config({ path: altPath });
+      console.log('✅ Environment loaded from:', altPath);
+      break;
+    }
+  }
+}
 
 // Debug: Check if Supabase credentials are loaded
 console.log('🔧 Environment check:');
 console.log('  SUPABASE_URL:', process.env.NEXT_PUBLIC_SUPABASE_URL ? '✅ Loaded' : '❌ Missing');
 console.log('  SUPABASE_KEY:', process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ? '✅ Loaded' : '❌ Missing');
+console.log('  NODE_ENV:', process.env.NODE_ENV || 'not set');
+console.log('  Platform:', process.platform);
+console.log('  Architecture:', process.arch);
 
 const { app, BrowserWindow, Notification, ipcMain, shell, dialog } = require('electron');
 const AuthManager = require('./services/AuthManager');
@@ -126,23 +155,22 @@ async function detectNextJsPort() {
 
 // Function to select an available port (for production mode)
 async function selectAvailablePort() {
-  const port3000Available = await isPortAvailable(3000);
-  if (port3000Available) {
-    console.log('✅ Port 3000 is available');
-    selectedPort = 3000;
-    return 3000;
+  const portsToTry = [3000, 3001, 3002, 3003, 3004];
+  
+  for (const port of portsToTry) {
+    console.log(`🔍 Checking port ${port}...`);
+    const available = await isPortAvailable(port);
+    if (available) {
+      console.log(`✅ Port ${port} is available`);
+      selectedPort = port;
+      return port;
+    } else {
+      console.log(`⚠️ Port ${port} is busy`);
+    }
   }
   
-  console.log('⚠️ Port 3000 is busy, checking port 3001...');
-  const port3001Available = await isPortAvailable(3001);
-  if (port3001Available) {
-    console.log('✅ Port 3001 is available');
-    selectedPort = 3001;
-    return 3001;
-  }
-  
-  console.error('❌ Both ports 3000 and 3001 are busy!');
-  throw new Error('Neither port 3000 nor 3001 is available');
+  console.error('❌ All ports 3000-3004 are busy!');
+  throw new Error('No available ports found in range 3000-3004');
 }
 
 // Register IPC handlers early
@@ -250,6 +278,8 @@ async function createWindow() {
     const { spawn } = require('child_process');
     
     console.log(`🚀 Starting Next.js standalone server on port ${selectedPort}...`);
+    console.log(`🖥️ Platform: ${process.platform}`);
+    console.log(`📁 Current directory: ${__dirname}`);
     
     // Path to the standalone server
     const serverPath = path.join(__dirname, '../.next/standalone/server.js');
@@ -269,7 +299,7 @@ async function createWindow() {
       console.error('❌ Available files in .next:', fs.existsSync(path.join(__dirname, '../.next')) ? fs.readdirSync(path.join(__dirname, '../.next')) : 'No .next folder');
       
       // Fallback: try to load a simple error page
-      url = `data:text/html,<html><body><h1>Error: Next.js server not found</h1><p>Please rebuild the application with: npm run build</p></body></html>`;
+      url = `data:text/html,<html><body><h1>Error: Next.js server not found</h1><p>Please rebuild the application with: npm run build</p><p>Server path: ${serverPath}</p><p>Platform: ${process.platform}</p></body></html>`;
     } else {
       try {
         // Copy static folder to standalone if needed
@@ -293,52 +323,190 @@ async function createWindow() {
           console.log('✅ Public files copied');
         }
         
-        // Start the Next.js server as a child process
-        const nextServer = spawn('node', [serverPath], {
-          cwd: standalonePath,
-          env: {
-            ...process.env,
-            PORT: selectedPort.toString(),
-            HOSTNAME: 'localhost',
-          },
-          stdio: ['ignore', 'pipe', 'pipe']
-        });
+        // Copy .env.local to standalone if needed (for environment variables)
+        const envPath = path.join(__dirname, '../.env.local');
+        const standaloneEnvPath = path.join(standalonePath, '.env.local');
+        if (!fs.existsSync(standaloneEnvPath) && fs.existsSync(envPath)) {
+          console.log('📦 Copying environment file to standalone folder...');
+          fs.copyFileSync(envPath, standaloneEnvPath);
+          console.log('✅ Environment file copied');
+        }
         
-        nextServer.stdout.on('data', (data) => {
-          console.log('Next.js:', data.toString().trim());
-        });
+        // Simplified approach: Use direct require method since spawn is problematic on Mac
+        console.log('🚀 Starting server using direct require method...');
         
-        nextServer.stderr.on('data', (data) => {
-          console.error('Next.js Error:', data.toString().trim());
-        });
+        // Set environment variables for the server
+        const serverEnv = {
+          ...process.env,
+          PORT: selectedPort.toString(),
+          HOSTNAME: 'localhost',
+          NODE_ENV: 'production'
+        };
         
-        nextServer.on('error', (error) => {
-          console.error('❌ Failed to start Next.js server:', error);
-        });
+        // Explicitly set Supabase environment variables if they exist
+        if (process.env.NEXT_PUBLIC_SUPABASE_URL) {
+          serverEnv.NEXT_PUBLIC_SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
+        }
+        if (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+          serverEnv.NEXT_PUBLIC_SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+        }
         
-        nextServer.on('exit', (code, signal) => {
-          console.log(`Next.js server exited with code ${code} and signal ${signal}`);
-        });
+        console.log('🔧 Server environment:');
+        console.log('  PORT:', serverEnv.PORT);
+        console.log('  NODE_ENV:', serverEnv.NODE_ENV);
+        console.log('  SUPABASE_URL:', serverEnv.NEXT_PUBLIC_SUPABASE_URL ? '✅ Set' : '❌ Missing');
         
-        // Store the server process so we can kill it on app quit
-        global.nextServerProcess = nextServer;
+        // Store original environment and directory
+        const originalEnv = { ...process.env };
+        const originalCwd = process.cwd();
         
-        // Give the server a moment to start
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        try {
+          // Set environment variables
+          Object.assign(process.env, serverEnv);
+          
+          // Change to standalone directory
+          process.chdir(standalonePath);
+          
+          // Clear require cache and start server
+          delete require.cache[serverPath];
+          require(serverPath);
+          
+          console.log('✅ Server started successfully using direct method');
+          
+          // Wait a moment for server to initialize
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          
+          url = `http://localhost:${selectedPort}`;
+          
+        } catch (requireError) {
+          console.error('❌ Server startup failed:', requireError);
+          url = `data:text/html,<html><body style="font-family: Arial, sans-serif; padding: 20px; background: #f44336; color: white;"><h1>Server Startup Error</h1><p><strong>Error:</strong> ${requireError.message}</p><p><strong>Platform:</strong> ${process.platform}</p><p><strong>Port:</strong> ${selectedPort}</p></body></html>`;
+        } finally {
+          // Restore original environment and directory
+          process.env = originalEnv;
+          process.chdir(originalCwd);
+        }
         
-        url = `http://localhost:${selectedPort}`;
-        console.log('✅ Next.js standalone server started');
+
       } catch (error) {
         console.error('❌ Failed to start Next.js server:', error);
-        url = `data:text/html,<html><body><h1>Error: Failed to start server</h1><p>${error.message}</p></body></html>`;
+        url = `data:text/html,<html><body><h1>Error: Failed to start server</h1><p>${error.message}</p><p>Platform: ${process.platform}</p></body></html>`;
       }
     }
   }
   
+  console.log('🌐 Loading URL:', url);
+  
+  // Add comprehensive error handling for URL loading
+  mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL) => {
+    console.error('❌ Failed to load URL:', validatedURL);
+    console.error('❌ Error code:', errorCode);
+    console.error('❌ Error description:', errorDescription);
+    
+    // Load an error page if the main URL fails
+    const errorHtml = `
+      <html>
+        <head>
+          <title>Colabify - Loading Error</title>
+          <style>
+            body { 
+              font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; 
+              padding: 40px; 
+              background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+              color: white;
+              margin: 0;
+              min-height: 100vh;
+              display: flex;
+              flex-direction: column;
+              justify-content: center;
+            }
+            .container { background: rgba(255,255,255,0.1); padding: 30px; border-radius: 15px; backdrop-filter: blur(10px); }
+            .error { color: #ff6b6b; }
+            .info { margin: 10px 0; }
+            code { background: rgba(0,0,0,0.3); padding: 2px 6px; border-radius: 4px; }
+            .retry-btn { 
+              background: #4CAF50; 
+              color: white; 
+              border: none; 
+              padding: 10px 20px; 
+              border-radius: 5px; 
+              cursor: pointer; 
+              margin-top: 20px;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <h1>🚫 Failed to Load Colabify</h1>
+            <div class="info"><strong>URL:</strong> ${validatedURL}</div>
+            <div class="info"><strong>Error Code:</strong> <span class="error">${errorCode}</span></div>
+            <div class="info"><strong>Error:</strong> <span class="error">${errorDescription}</span></div>
+            <div class="info"><strong>Platform:</strong> ${process.platform}</div>
+            <div class="info"><strong>Development Mode:</strong> ${isDev}</div>
+            <div class="info"><strong>Selected Port:</strong> ${selectedPort}</div>
+            <hr style="border: 1px solid rgba(255,255,255,0.3); margin: 20px 0;">
+            <h3>Troubleshooting Steps:</h3>
+            <ol>
+              <li>Try rebuilding: <code>npm run build</code></li>
+              <li>Check if port ${selectedPort} is available</li>
+              <li>Restart the application</li>
+              <li>Check the console for additional error messages</li>
+            </ol>
+            <button class="retry-btn" onclick="location.reload()">🔄 Retry</button>
+          </div>
+        </body>
+      </html>
+    `;
+    mainWindow.loadURL(`data:text/html,${encodeURIComponent(errorHtml)}`);
+  });
+
+  mainWindow.webContents.on('did-finish-load', () => {
+    console.log('✅ Page loaded successfully');
+    
+    // Inject some debugging info into the page
+    mainWindow.webContents.executeJavaScript(`
+      console.log('🔍 Electron Debug Info:');
+      console.log('Platform: ${process.platform}');
+      console.log('URL: ${url}');
+      console.log('Development Mode: ${isDev}');
+      console.log('Selected Port: ${selectedPort}');
+    `).catch(err => console.log('Could not inject debug info:', err));
+  });
+
+  mainWindow.webContents.on('dom-ready', () => {
+    console.log('✅ DOM ready');
+  });
+
+  // Add a timeout for loading
+  const loadTimeout = setTimeout(() => {
+    console.error('⏰ URL loading timeout after 30 seconds');
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      const timeoutHtml = `
+        <html>
+          <head><title>Loading Timeout</title></head>
+          <body style="font-family: Arial, sans-serif; padding: 20px; text-align: center; background: #f44336; color: white;">
+            <h1>⏰ Loading Timeout</h1>
+            <p>The application failed to load within 30 seconds.</p>
+            <p><strong>URL:</strong> ${url}</p>
+            <p><strong>Platform:</strong> ${process.platform}</p>
+            <button onclick="location.reload()" style="padding: 10px 20px; font-size: 16px;">🔄 Retry</button>
+          </body>
+        </html>
+      `;
+      mainWindow.loadURL(`data:text/html,${encodeURIComponent(timeoutHtml)}`);
+    }
+  }, 30000);
+
+  // Clear timeout when page loads successfully
+  mainWindow.webContents.once('did-finish-load', () => {
+    clearTimeout(loadTimeout);
+  });
+
   mainWindow.loadURL(url);
 
   // Show window when ready to prevent visual flash
   mainWindow.once('ready-to-show', () => {
+    console.log('🪟 Window ready to show');
     mainWindow.show();
 
     // Initialize Git monitoring backend after window is ready
@@ -350,12 +518,25 @@ async function createWindow() {
 
   // Prevent navigation to external URLs (for OAuth flow)
   mainWindow.webContents.on('will-navigate', (event, navigationUrl) => {
-    const parsedUrl = new URL(navigationUrl);
+    console.log('🧭 Navigation attempt to:', navigationUrl);
+    
+    try {
+      const parsedUrl = new URL(navigationUrl);
+      const expectedOrigin = `http://localhost:${selectedPort}`;
+      
+      console.log('🧭 Expected origin:', expectedOrigin);
+      console.log('🧭 Actual origin:', parsedUrl.origin);
 
-    // Allow navigation within the app (using the selected port since we need API routes)
-    if (parsedUrl.origin !== `http://localhost:${selectedPort}`) {
+      // Allow navigation within the app (using the selected port since we need API routes)
+      if (parsedUrl.origin !== expectedOrigin) {
+        event.preventDefault();
+        console.log('🚫 Blocked navigation to:', navigationUrl);
+      } else {
+        console.log('✅ Allowed navigation to:', navigationUrl);
+      }
+    } catch (urlError) {
+      console.error('❌ Error parsing navigation URL:', urlError);
       event.preventDefault();
-      console.log('Blocked navigation to:', navigationUrl);
     }
   });
 
@@ -838,6 +1019,12 @@ if (isDev) {
 
 // App lifecycle events
 app.whenReady().then(async () => {
+  console.log('🚀 App ready event fired');
+  console.log('🖥️ Platform:', process.platform);
+  console.log('🔧 Development mode:', isDev);
+  console.log('📁 __dirname:', __dirname);
+  console.log('📁 process.cwd():', process.cwd());
+  
   // Select an available port before creating the window
   try {
     if (isDev) {

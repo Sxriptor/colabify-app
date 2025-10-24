@@ -59,13 +59,15 @@
       "target": [
         "dmg",
         "zip"
-      ]
+      ],
+      "artifactName": "Colabify-Setup.${ext}"
     },
     "win": {
       "icon": "build/icon.ico",
       "target": [
         "nsis"
-      ]
+      ],
+      "artifactName": "Colabify-Setup.${ext}"
     },
     "linux": {
       "icon": "build/icons",
@@ -73,7 +75,8 @@
         "AppImage",
         "deb"
       ],
-      "category": "Development"
+      "category": "Development",
+      "artifactName": "Colabify-Setup.${ext}"
     },
     "nsis": {
       "oneClick": false,
