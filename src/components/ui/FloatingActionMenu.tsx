@@ -163,6 +163,10 @@ export function FloatingActionMenu() {
     router.push('/inbox')
   }
 
+  const handleTimeCardClick = () => {
+    router.push('/time-card')
+  }
+
   return (
     <>
       <div className="fixed bottom-6 right-6 z-[60]">
@@ -208,6 +212,17 @@ export function FloatingActionMenu() {
             {unreadInboxCount > 0 && (
               <div className="absolute -top-1 -right-1 w-3 h-3 bg-blue-800 rounded-full border-2 border-gray-800"></div>
             )}
+          </button>
+
+          {/* Time Card Button */}
+          <button
+            onClick={handleTimeCardClick}
+            className="text-white hover:bg-gray-700 transition-colors duration-200 rounded p-3"
+            title="Time Card"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
           </button>
 
           {/* Settings Button */}

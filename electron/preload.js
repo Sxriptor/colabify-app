@@ -180,5 +180,37 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.removeAllListeners('updater:update-download-progress');
     ipcRenderer.removeAllListeners('updater:update-downloaded');
     ipcRenderer.removeAllListeners('updater:update-error');
+  },
+
+  // Time Card API
+  timecard: {
+    scanApplications: () => {
+      console.log('🔍 PRELOAD: scanApplications called');
+      return ipcRenderer.invoke('timecard:scan-applications');
+    },
+    launchApp: (appName, executablePath) => {
+      console.log(`🚀 PRELOAD: launchApp called for ${appName}`);
+      return ipcRenderer.invoke('timecard:launch-app', appName, executablePath);
+    },
+    getData: () => {
+      console.log('📊 PRELOAD: getData called');
+      return ipcRenderer.invoke('timecard:get-data');
+    },
+    getAppData: (appName) => {
+      console.log(`📊 PRELOAD: getAppData called for ${appName}`);
+      return ipcRenderer.invoke('timecard:get-app-data', appName);
+    },
+    stopTracking: (appName) => {
+      console.log(`⏱️ PRELOAD: stopTracking called for ${appName}`);
+      return ipcRenderer.invoke('timecard:stop-tracking', appName);
+    },
+    checkSessions: () => {
+      console.log('🔍 PRELOAD: checkSessions called');
+      return ipcRenderer.invoke('timecard:check-sessions');
+    },
+    getDataByDate: (startDate, endDate) => {
+      console.log('📅 PRELOAD: getDataByDate called');
+      return ipcRenderer.invoke('timecard:get-data-by-date', startDate, endDate);
+    }
   }
 });

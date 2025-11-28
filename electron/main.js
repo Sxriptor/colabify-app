@@ -224,6 +224,228 @@ console.log('✅ Early IPC handlers registered');
 
 // No protocol registration needed - using external browser with local callback server
 
+// Helper function to launch an application (reused by tray menu and IPC handler)
+async function launchApplication(appName, executablePath) {
+  const { exec } = require('child_process');
+  const platform = process.platform;
+  const fs = require('fs');
+  
+  // Validate and find the actual executable
+  let actualExecutable = null;
+  
+  if (executablePath) {
+    // Check if it's a direct .exe path
+    if (executablePath.endsWith('.exe') && fs.existsSync(executablePath)) {
+      actualExecutable = executablePath;
+    } else if (fs.existsSync(executablePath)) {
+      // It's a directory, try to find the executable using ApplicationScanner
+      if (applicationScanner && typeof applicationScanner.findExecutable === 'function') {
+        const foundExe = applicationScanner.findExecutable(appName, executablePath);
+        if (foundExe && fs.existsSync(foundExe)) {
+          actualExecutable = foundExe;
+        }
+      } else {
+        // Fallback: try common executable names
+        const possibleExes = [
+          path.join(executablePath, `${appName}.exe`),
+          path.join(executablePath, 'app.exe'),
+          path.join(executablePath, 'application.exe')
+        ];
+        for (const exe of possibleExes) {
+          if (fs.existsSync(exe)) {
+            actualExecutable = exe;
+            break;
+          }
+        }
+      }
+    }
+  }
+  
+  if (!actualExecutable) {
+    console.error(`❌ Could not find valid executable for ${appName} at ${executablePath}`);
+    return { success: false, error: `Could not find executable for ${appName}` };
+  }
+  
+  console.log(`✅ Using executable: ${actualExecutable}`);
+  
+  // Launch the application
+  if (platform === 'win32') {
+    // Windows: Use 'start' command for better compatibility
+    // This ensures the app launches in a new window and doesn't block
+    const command = `start "" "${actualExecutable}"`;
+    console.log(`🔧 Running: ${command}`);
+    
+    exec(command, (error, stdout, stderr) => {
+      if (error) {
+        console.error(`❌ Error launching ${appName}:`, error);
+      } else {
+        console.log(`✅ Successfully launched ${appName}`);
+      }
+    });
+  } else if (platform === 'darwin') {
+    // macOS: use open command
+    exec(`open "${actualExecutable}"`, (error) => {
+      if (error) {
+        console.error(`❌ Error launching ${appName}:`, error);
+      }
+    });
+  } else {
+    // Linux: use xdg-open or direct executable
+    exec(`xdg-open "${actualExecutable}"`, (error) => {
+      if (error) {
+        console.error(`❌ Error launching ${appName}:`, error);
+      }
+    });
+  }
+
+  // Start tracking time (TimeTracker will monitor the process automatically)
+  if (timeTracker) {
+    // Use the actual executable path for monitoring
+    timeTracker.startTracking(appName, actualExecutable);
+  }
+
+  return { success: true };
+}
+
+// Function to build tray menu with applications
+async function buildTrayMenu() {
+  const menuItems = [
+    {
+      label: 'Show Colabify',
+      click: () => {
+        if (mainWindow) {
+          if (mainWindow.isMinimized()) {
+            mainWindow.restore();
+          }
+          mainWindow.show();
+          mainWindow.focus();
+        }
+      }
+    },
+    {
+      label: 'Notifications',
+      click: () => {
+        if (mainWindow) {
+          if (mainWindow.isMinimized()) {
+            mainWindow.restore();
+          }
+          mainWindow.show();
+          mainWindow.focus();
+          // Navigate to inbox page
+          mainWindow.webContents.send('navigate-to-inbox');
+        }
+      }
+    },
+    {
+      type: 'separator'
+    }
+  ];
+
+  // Add applications section if scanner is available
+  if (applicationScanner) {
+    try {
+      console.log('🔍 Loading applications for tray menu...');
+      const apps = await applicationScanner.scanInstalledApplications();
+      
+      if (apps && apps.length > 0) {
+        // Group apps by category
+        const appsByCategory = {};
+        for (const app of apps) {
+          const category = app.category || 'Other';
+          if (!appsByCategory[category]) {
+            appsByCategory[category] = [];
+          }
+          appsByCategory[category].push(app);
+        }
+
+        // Sort categories and apps
+        const sortedCategories = Object.keys(appsByCategory).sort();
+        const maxAppsPerCategory = 20; // Limit apps per category to avoid menu overflow
+        
+        // Add separator before apps
+        menuItems.push({ type: 'separator' });
+        menuItems.push({ label: 'Applications', enabled: false });
+
+        // Add apps grouped by category
+        for (const category of sortedCategories) {
+          const categoryApps = appsByCategory[category].sort((a, b) => 
+            a.name.localeCompare(b.name)
+          );
+
+          const appsToShow = categoryApps.slice(0, maxAppsPerCategory);
+
+          // Add category submenu if there are apps
+          if (appsToShow.length > 0) {
+            const categoryLabel = category.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+            
+            // If category has many apps, create a submenu
+            if (appsToShow.length > 10) {
+              const categoryMenuItems = appsToShow.map(app => ({
+                label: app.name,
+                click: async () => {
+                  await launchApplication(app.name, app.executable || app.path);
+                }
+              }));
+
+              menuItems.push({
+                label: categoryLabel,
+                submenu: categoryMenuItems
+              });
+            } else {
+              // Add separator for category
+              menuItems.push({ type: 'separator' });
+              menuItems.push({ label: categoryLabel, enabled: false });
+              
+              // Add apps directly to menu
+              for (const app of appsToShow) {
+                menuItems.push({
+                  label: app.name,
+                  click: async () => {
+                    await launchApplication(app.name, app.executable || app.path);
+                  }
+                });
+              }
+            }
+          }
+        }
+
+        // Show count if there are more apps
+        const totalApps = apps.length;
+        const shownApps = Object.values(appsByCategory).reduce((sum, catApps) => 
+          sum + Math.min(catApps.length, maxAppsPerCategory), 0
+        );
+        
+        if (totalApps > shownApps) {
+          menuItems.push({ type: 'separator' });
+          menuItems.push({ 
+            label: `... and ${totalApps - shownApps} more (open app to see all)`,
+            enabled: false
+          });
+        }
+      } else {
+        menuItems.push({ type: 'separator' });
+        menuItems.push({ label: 'No applications found', enabled: false });
+      }
+    } catch (error) {
+      console.error('❌ Error loading applications for tray menu:', error);
+      menuItems.push({ type: 'separator' });
+      menuItems.push({ label: 'Error loading applications', enabled: false });
+    }
+  }
+
+  // Add final separator and quit
+  menuItems.push({ type: 'separator' });
+  menuItems.push({
+    label: 'Quit',
+    click: () => {
+      app.isQuitting = true;
+      app.quit();
+    }
+  });
+
+  return Menu.buildFromTemplate(menuItems);
+}
+
 // Function to create system tray
 function createSystemTray() {
   console.log('🔔 Creating system tray...');
@@ -259,49 +481,48 @@ function createSystemTray() {
   
   tray.setToolTip('Colabify');
   
-  // Create context menu
-  const contextMenu = Menu.buildFromTemplate([
-    {
-      label: 'Show Colabify',
-      click: () => {
-        if (mainWindow) {
-          if (mainWindow.isMinimized()) {
-            mainWindow.restore();
+  // Function to update tray menu
+  const updateTrayMenu = async () => {
+    try {
+      const contextMenu = await buildTrayMenu();
+      tray.setContextMenu(contextMenu);
+    } catch (error) {
+      console.error('❌ Error updating tray menu:', error);
+      // Fallback to basic menu
+      const fallbackMenu = Menu.buildFromTemplate([
+        {
+          label: 'Show Colabify',
+          click: () => {
+            if (mainWindow) {
+              if (mainWindow.isMinimized()) {
+                mainWindow.restore();
+              }
+              mainWindow.show();
+              mainWindow.focus();
+            }
           }
-          mainWindow.show();
-          mainWindow.focus();
-        }
-      }
-    },
-    {
-      label: 'Notifications',
-      click: () => {
-        if (mainWindow) {
-          if (mainWindow.isMinimized()) {
-            mainWindow.restore();
+        },
+        { type: 'separator' },
+        {
+          label: 'Quit',
+          click: () => {
+            app.isQuitting = true;
+            app.quit();
           }
-          mainWindow.show();
-          mainWindow.focus();
-          // Navigate to inbox page
-          mainWindow.webContents.send('navigate-to-inbox');
         }
-      }
-    },
-    {
-      type: 'separator'
-    },
-    {
-      label: 'Quit',
-      click: () => {
-        app.isQuitting = true;
-        app.quit();
-      }
+      ]);
+      tray.setContextMenu(fallbackMenu);
     }
-  ]);
-  
-  // Set context menu (shows on right-click)
-  tray.setContextMenu(contextMenu);
-  
+  };
+
+  // Build initial menu
+  updateTrayMenu();
+
+  // Update menu when right-clicked (refresh apps list)
+  tray.on('right-click', async () => {
+    await updateTrayMenu();
+  });
+
   // Handle left-click on tray icon
   tray.on('click', () => {
     if (mainWindow) {
@@ -1033,6 +1254,13 @@ let gitMonitoringBackend;
 // Initialize notification system
 let notificationService;
 
+// Initialize time tracking system
+let timeTracker;
+let applicationScanner;
+
+// Setup time card IPC handlers (after variable declarations)
+setupTimeCardIPC();
+
 // Function to setup notification IPC handlers
 function setupNotificationIPC() {
   console.log('🔔 Setting up Notification IPC handlers');
@@ -1186,6 +1414,138 @@ function setupAutoUpdaterIPC() {
   });
 
   console.log('✅ Auto-updater IPC handlers setup complete');
+}
+
+// Function to setup time card IPC handlers
+function setupTimeCardIPC() {
+  console.log('⏱️ Setting up Time Card IPC handlers');
+
+  // Initialize services (lazy initialization)
+  const { ApplicationScanner } = require('./services/ApplicationScanner');
+  const { TimeTracker } = require('./services/TimeTracker');
+  
+  // Initialize module-level variables if not already initialized
+  if (!applicationScanner) {
+    try {
+      applicationScanner = new ApplicationScanner();
+    } catch (error) {
+      console.error('Error initializing ApplicationScanner:', error);
+      // Create a dummy scanner that returns empty array
+      applicationScanner = {
+        scanInstalledApplications: async () => []
+      };
+    }
+  }
+  if (!timeTracker) {
+    try {
+      timeTracker = new TimeTracker();
+    } catch (error) {
+      console.error('Error initializing TimeTracker:', error);
+      // Create a dummy tracker
+      timeTracker = {
+        startTracking: () => {},
+        stopTracking: () => {},
+        getData: () => ({ applications: {}, sessions: [], totalTime: {}, activeSessions: [] }),
+        getAppData: () => ({ totalMinutes: 0, lastUsed: null, sessions: [] }),
+        getDataByDate: () => ({})
+      };
+    }
+  }
+
+  // Scan for installed applications
+  ipcMain.handle('timecard:scan-applications', async () => {
+    try {
+      console.log('🔍 Scanning for applications...');
+      const apps = await applicationScanner.scanInstalledApplications();
+      console.log(`✅ Found ${apps.length} applications`);
+      return { success: true, applications: apps };
+    } catch (error) {
+      console.error('Error scanning applications:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  // Launch an application
+  ipcMain.handle('timecard:launch-app', async (event, appName, executablePath) => {
+    try {
+      console.log(`🚀 Launching application: ${appName}`);
+      console.log(`📁 Executable path: ${executablePath}`);
+      
+      return await launchApplication(appName, executablePath);
+    } catch (error) {
+      console.error('❌ Error launching application:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  // Get time tracking data
+  ipcMain.handle('timecard:get-data', async () => {
+    try {
+      if (!timeTracker) {
+        timeTracker = new TimeTracker();
+      }
+      return { success: true, data: timeTracker.getData() };
+    } catch (error) {
+      console.error('Error getting time tracking data:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  // Get data for a specific application
+  ipcMain.handle('timecard:get-app-data', async (event, appName) => {
+    try {
+      if (!timeTracker) {
+        timeTracker = new TimeTracker();
+      }
+      return { success: true, data: timeTracker.getAppData(appName) };
+    } catch (error) {
+      console.error('Error getting app data:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  // Stop tracking for an application
+  ipcMain.handle('timecard:stop-tracking', async (event, appName) => {
+    try {
+      if (!timeTracker) {
+        timeTracker = new TimeTracker();
+      }
+      timeTracker.stopTracking(appName);
+      return { success: true };
+    } catch (error) {
+      console.error('Error stopping tracking:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  // Manually check if tracked applications are still running
+  ipcMain.handle('timecard:check-sessions', async () => {
+    try {
+      if (!timeTracker) {
+        timeTracker = new TimeTracker();
+      }
+      await timeTracker.manualCheck();
+      return { success: true };
+    } catch (error) {
+      console.error('Error checking sessions:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  // Get data by date range
+  ipcMain.handle('timecard:get-data-by-date', async (event, startDate, endDate) => {
+    try {
+      if (!timeTracker) {
+        timeTracker = new TimeTracker();
+      }
+      return { success: true, data: timeTracker.getDataByDate(startDate, endDate) };
+    } catch (error) {
+      console.error('Error getting data by date:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  console.log('✅ Time Card IPC handlers setup complete');
 }
 
 // Function to initialize Git monitoring (called after window is ready)
