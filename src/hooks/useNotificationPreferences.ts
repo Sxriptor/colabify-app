@@ -32,7 +32,7 @@ export function useNotificationPreferences() {
       const supabase = await createElectronClient()
 
       const { data, error: fetchError } = await supabase
-        .from('users')
+        .from('profiles')
         .select('notification_preferences')
         .eq('id', user.id)
         .single()
@@ -64,7 +64,7 @@ export function useNotificationPreferences() {
       const supabase = await createElectronClient()
 
       const { error: updateError } = await supabase
-        .from('users')
+        .from('profiles')
         .update({ notification_preferences: updatedPreferences })
         .eq('id', user.id)
 

@@ -250,7 +250,7 @@ export class NotificationService {
 
     try {
       const { data, error } = await this.supabase
-        .from('users')
+        .from('profiles')
         .select('notification_preferences')
         .eq('id', userId)
         .single()

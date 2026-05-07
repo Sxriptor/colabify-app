@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { fetchProfilesMap } from '@/lib/profiles'
 import { NextResponse } from 'next/server'
 
 export async function GET() {
@@ -12,9 +13,9 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Get user's email from the users table
+    // Get user's email from profiles
     const { data: userData } = await supabase
-      .from('users')
+      .from('profiles')
       .select('email')
       .eq('id', user.id)
       .single()
@@ -36,8 +37,7 @@ export async function GET() {
         status,
         expires_at,
         created_at,
-        project:projects(id, name, description, visibility),
-        inviter:users!project_invitations_invited_by_fkey(name, email)
+        project:projects(id, name, description, visibility)
       `)
       .eq('email', userEmail)
       .eq('status', 'pending')
@@ -49,7 +49,17 @@ export async function GET() {
       return NextResponse.json({ error: 'Failed to fetch invitations' }, { status: 500 })
     }
 
-    return NextResponse.json({ invitations: invitations || [] })
+    const profiles = await fetchProfilesMap(
+      supabase,
+      (invitations || []).map((invitation: any) => invitation.invited_by)
+    )
+
+    const normalizedInvitations = (invitations || []).map((invitation: any) => ({
+      ...invitation,
+      inviter: profiles.get(invitation.invited_by) || null
+    }))
+
+    return NextResponse.json({ invitations: normalizedInvitations })
 
   } catch (error) {
     console.error('Invitations API error:', error)

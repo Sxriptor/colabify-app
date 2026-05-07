@@ -607,16 +607,29 @@ async function createWindow() {
     console.log(`🖥️ Platform: ${process.platform}`);
     console.log(`📁 Current directory: ${__dirname}`);
     
-    // Path to the standalone server
-    const serverPath = path.join(__dirname, '../.next/standalone/server.js');
-    const standalonePath = path.join(__dirname, '../.next/standalone');
+    // Resolve Next standalone server path (Next.js on Windows can nest under project path segments)
+    const standaloneBasePath = path.join(__dirname, '../.next/standalone');
+    let serverPath = path.join(standaloneBasePath, 'server.js');
+    if (!fs.existsSync(serverPath) && fs.existsSync(standaloneBasePath)) {
+      const candidateServerPaths = fs.readdirSync(standaloneBasePath, { recursive: true })
+        .filter((entry) => entry === 'server.js' || entry.endsWith(`${path.sep}server.js`))
+        .map((entry) => path.join(standaloneBasePath, entry))
+        .filter((fullPath) => !fullPath.includes(`${path.sep}node_modules${path.sep}`));
+
+      if (candidateServerPaths.length > 0) {
+        serverPath = candidateServerPaths[0];
+      }
+    }
+    const standalonePath = path.dirname(serverPath);
     const staticPath = path.join(__dirname, '../.next/static');
     
     console.log('📁 Checking paths:');
     console.log('  Server path:', serverPath);
     console.log('  Server exists:', fs.existsSync(serverPath));
-    console.log('  Standalone path:', standalonePath);
-    console.log('  Standalone exists:', fs.existsSync(standalonePath));
+    console.log('  Standalone base path:', standaloneBasePath);
+    console.log('  Standalone base exists:', fs.existsSync(standaloneBasePath));
+    console.log('  Resolved standalone path:', standalonePath);
+    console.log('  Resolved standalone exists:', fs.existsSync(standalonePath));
     console.log('  Static path:', staticPath);
     console.log('  Static exists:', fs.existsSync(staticPath));
     

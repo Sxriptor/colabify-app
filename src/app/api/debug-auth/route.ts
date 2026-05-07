@@ -16,10 +16,10 @@ export async function GET() {
       return NextResponse.json({ error: 'No user found' })
     }
     
-    // Try to query the users table
+    // Try to query the profiles table
     const { data: customUser, error: dbError } = await supabase
-      .from('users')
-      .select('*')
+      .from('profiles')
+      .select('id, email, full_name, role, avatar_url, github_username')
       .eq('id', user.id)
       .single()
     
@@ -29,7 +29,7 @@ export async function GET() {
         email: user.email,
         metadata: user.user_metadata
       },
-      customUser,
+      customUser: customUser ? { ...customUser, name: customUser.full_name } : customUser,
       dbError
     })
   } catch (error) {

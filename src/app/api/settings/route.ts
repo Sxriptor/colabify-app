@@ -14,8 +14,8 @@ export async function GET() {
 
     // Get user settings
     const { data: userData, error } = await supabase
-      .from('users')
-      .select('id, email, name, notification_preference, avatar_url, github_username')
+      .from('profiles')
+      .select('id, email, full_name, notification_preference, avatar_url, github_username')
       .eq('id', user.id)
       .single()
 
@@ -24,7 +24,9 @@ export async function GET() {
       return NextResponse.json({ error: 'Failed to fetch settings' }, { status: 500 })
     }
 
-    return NextResponse.json({ settings: userData })
+    return NextResponse.json({
+      settings: userData ? { ...userData, name: userData.full_name } : userData
+    })
 
   } catch (error) {
     console.error('Settings API error:', error)
@@ -53,7 +55,7 @@ export async function PUT(request: Request) {
         if (key === 'notification_preference' && !['instant', 'digest'].includes(value as string)) {
           return NextResponse.json({ error: 'Invalid notification preference' }, { status: 400 })
         }
-        updates[key] = value
+        updates[key === 'name' ? 'full_name' : key] = value
       }
     }
 
@@ -63,10 +65,10 @@ export async function PUT(request: Request) {
 
     // Update user settings
     const { data: updatedUser, error } = await supabase
-      .from('users')
+      .from('profiles')
       .update(updates)
       .eq('id', user.id)
-      .select('id, email, name, notification_preference, avatar_url, github_username')
+      .select('id, email, full_name, notification_preference, avatar_url, github_username')
       .single()
 
     if (error) {
@@ -76,7 +78,7 @@ export async function PUT(request: Request) {
 
     return NextResponse.json({ 
       message: 'Settings updated successfully',
-      settings: updatedUser 
+      settings: updatedUser ? { ...updatedUser, name: updatedUser.full_name } : updatedUser 
     })
 
   } catch (error) {

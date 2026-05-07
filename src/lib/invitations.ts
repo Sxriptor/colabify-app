@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { fetchProfilesMap } from './profiles'
 import { sendInvitationEmail } from './email'
 
 export interface InvitationResult {
@@ -276,8 +277,8 @@ export async function sendInvitationEmails(
       .single()
 
     const { data: inviter } = await supabase
-      .from('users')
-      .select('name, email')
+      .from('profiles')
+      .select('full_name, email')
       .eq('id', inviterUserId)
       .single()
 
@@ -285,7 +286,7 @@ export async function sendInvitationEmails(
       return emails.map(email => ({
         email,
         status: 'error',
-        message: 'Failed to fetch project or inviter information'
+          message: 'Failed to fetch project or inviter information'
       }))
     }
 
@@ -295,7 +296,7 @@ export async function sendInvitationEmails(
       try {
         // Check if user already exists
         const { data: existingUser } = await supabase
-          .from('users')
+          .from('profiles')
           .select('id')
           .eq('email', email)
           .single()
@@ -370,7 +371,7 @@ export async function sendInvitationEmails(
         const emailSent = await sendInvitationEmail({
           recipientEmail: email,
           projectName: project.name,
-          inviterName: inviter.name || inviter.email,
+          inviterName: inviter.full_name || inviter.email,
           inviteUrl
         })
 
@@ -427,8 +428,7 @@ export async function getProjectInvitations(projectId: string): Promise<PendingI
         status,
         expires_at,
         created_at,
-        project:projects(name, description),
-        inviter:users!project_invitations_invited_by_fkey(name, email)
+        project:projects(name, description)
       `)
       .eq('project_id', projectId)
       .eq('status', 'pending')
@@ -440,7 +440,15 @@ export async function getProjectInvitations(projectId: string): Promise<PendingI
       return []
     }
 
-    return invitations || []
+    const profiles = await fetchProfilesMap(
+      supabase,
+      (invitations || []).map((invitation: any) => invitation.invited_by)
+    )
+
+    return (invitations || []).map((invitation: any) => ({
+      ...invitation,
+      inviter: profiles.get(invitation.invited_by) || null
+    }))
   } catch (error) {
     console.error('Error getting project invitations:', error)
     return []

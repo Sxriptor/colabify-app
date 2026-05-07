@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { fetchProfilesMap } from '@/lib/profiles'
 import { getProjectInvitations, cancelInvitation } from '@/lib/invitations'
 import { NextResponse } from 'next/server'
 
@@ -53,11 +54,11 @@ export async function GET(
       .from('project_members')
       .select(`
         id,
+        user_id,
         role,
         status,
         joined_at,
-        invited_at,
-        user:users(id, name, email, avatar_url)
+        invited_at
       `)
       .eq('project_id', projectId)
       .order('joined_at', { ascending: false })
@@ -72,8 +73,18 @@ export async function GET(
       invitations = await getProjectInvitations(projectId)
     }
 
+    const profiles = await fetchProfilesMap(
+      supabase,
+      (members || []).map((member: any) => member.user_id)
+    )
+
+    const normalizedMembers = (members || []).map((member: any) => ({
+      ...member,
+      user: profiles.get(member.user_id) || null,
+    }))
+
     return NextResponse.json({
-      members: members || [],
+      members: normalizedMembers,
       invitations,
       canManage: isOwner
     })

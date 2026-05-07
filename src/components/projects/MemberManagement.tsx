@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { fetchProfilesMap } from '@/lib/profiles'
 
 interface Member {
   id: string
@@ -54,11 +55,11 @@ export function MemberManagement({ projectId, canManage, refreshTrigger }: Membe
         .from('project_members')
         .select(`
           id,
+          user_id,
           role,
           status,
           joined_at,
-          invited_at,
-          user:users(id, name, email, avatar_url)
+          invited_at
         `)
         .eq('project_id', projectId)
 
@@ -70,10 +71,10 @@ export function MemberManagement({ projectId, canManage, refreshTrigger }: Membe
         .select(`
           id,
           email,
+          invited_by,
           status,
           expires_at,
-          created_at,
-          inviter:users!project_invitations_invited_by_fkey(name, email)
+          created_at
         `)
         .eq('project_id', projectId)
         .eq('status', 'pending')
@@ -81,14 +82,40 @@ export function MemberManagement({ projectId, canManage, refreshTrigger }: Membe
       if (invitationsError) throw invitationsError
 
       // Transform data to handle Supabase array responses for relations
+      const profiles = await fetchProfilesMap(
+        supabase,
+        [
+          ...(membersData || []).map((member: any) => member.user_id),
+          ...(invitationsData || []).map((invitation: any) => invitation.invited_by),
+        ]
+      )
+
       const transformedMembers = (membersData || []).map(item => ({
         ...item,
-        user: Array.isArray(item.user) ? item.user[0] : item.user
+        user: (() => {
+          const profile = profiles.get(item.user_id)
+          return profile
+            ? {
+                id: profile.id,
+                name: profile.name,
+                email: profile.email || '',
+                avatar_url: profile.avatar_url || undefined,
+              }
+            : undefined
+        })()
       }))
 
       const transformedInvitations = (invitationsData || []).map(item => ({
         ...item,
-        inviter: Array.isArray(item.inviter) ? item.inviter[0] : item.inviter
+        inviter: (() => {
+          const profile = profiles.get(item.invited_by)
+          return profile
+            ? {
+                name: profile.name,
+                email: profile.email || '',
+              }
+            : undefined
+        })()
       }))
 
       setMembers(transformedMembers)
@@ -134,7 +161,7 @@ export function MemberManagement({ projectId, canManage, refreshTrigger }: Membe
 
       const { error } = await supabase
         .from('project_invitations')
-        .update({ status: 'cancelled' })
+        .update({ status: 'declined' })
         .eq('id', invitationId)
 
       if (error) throw error

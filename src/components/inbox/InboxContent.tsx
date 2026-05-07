@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/auth/context'
 import { NotificationInbox } from '@/components/notifications/NotificationInbox'
+import { fetchProfilesMap } from '@/lib/profiles'
 
 interface Invitation {
   id: string
@@ -19,7 +20,7 @@ interface Invitation {
     description: string
     visibility: string
   }
-  inviter: {
+  inviter?: {
     name: string
     email: string
   }
@@ -90,8 +91,7 @@ export function InboxContent() {
           status,
           expires_at,
           created_at,
-          project:projects(id, name, description, visibility),
-          inviter:users!project_invitations_invited_by_fkey(name, email)
+          project:projects(id, name, description, visibility)
         `)
         .eq('email', user?.email)
         .eq('status', 'pending')
@@ -99,12 +99,26 @@ export function InboxContent() {
 
       if (error) throw error
 
+      const profiles = await fetchProfilesMap(
+        supabase,
+        (data || []).map((invitation: any) => invitation.invited_by)
+      )
+
       // Transform the data to match our interface (Supabase returns arrays for relations)
-      const transformedData = (data || []).map(item => ({
-        ...item,
-        project: Array.isArray(item.project) ? item.project[0] : item.project,
-        inviter: Array.isArray(item.inviter) ? item.inviter[0] : item.inviter
-      }))
+      const transformedData = (data || []).map(item => {
+        const inviterProfile = profiles.get(item.invited_by)
+
+        return {
+          ...item,
+          project: Array.isArray(item.project) ? item.project[0] : item.project,
+          inviter: inviterProfile
+            ? {
+                name: inviterProfile.name || inviterProfile.email || '',
+                email: inviterProfile.email || '',
+              }
+            : undefined
+        }
+      })
 
       setInvitations(transformedData)
     } catch (err) {

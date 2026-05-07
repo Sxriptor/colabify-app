@@ -23,7 +23,7 @@ export async function POST(
 
     // Get user's email
     const { data: userData } = await supabase
-      .from('users')
+      .from('profiles')
       .select('email')
       .eq('id', user.id)
       .single()

@@ -8,6 +8,7 @@ import { MemberManagement } from './MemberManagement'
 import { ConnectRepositoryModal } from './ConnectRepositoryModal'
 import { AddLocalFolderModal } from './AddLocalFolderModal'
 import { RecentActivityTabs } from './RecentActivityTabs'
+import { fetchProfilesMap } from '@/lib/profiles'
 
 interface ProjectDetailContentProps {
   projectId: string
@@ -40,7 +41,6 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
         .from('projects')
         .select(`
           *,
-          owner:users!projects_owner_id_fkey(id, name, email, avatar_url),
           repositories(
             id, 
             name, 
@@ -49,14 +49,14 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
             local_mappings:repository_local_mappings(
               id,
               local_path,
-              user:users(id, name, email)
+              user_id
             )
           ),
           members:project_members(
             id,
+            user_id,
             role,
-            status,
-            user:users(id, name, email, avatar_url)
+            status
           ),
           invitations:project_invitations!project_invitations_project_id_fkey(
             id,
@@ -76,21 +76,32 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
       if (error) throw error
       console.log('Project data loaded:', data)
 
+      const profiles = await fetchProfilesMap(
+        supabase,
+        [
+          data?.owner_id,
+          ...(data?.members || []).map((member: any) => member.user_id),
+          ...(data?.repositories || []).flatMap((repo: any) =>
+            (repo.local_mappings || []).map((mapping: any) => mapping.user_id)
+          ),
+        ]
+      )
+
       // Transform data to handle Supabase array responses for relations
       if (data) {
         const transformedData = {
           ...data,
-          owner: Array.isArray(data.owner) ? data.owner[0] : data.owner,
+          owner: profiles.get(data.owner_id) || null,
           repositories: (data.repositories || []).map((repo: any) => ({
             ...repo,
             local_mappings: (repo.local_mappings || []).map((mapping: any) => ({
               ...mapping,
-              user: Array.isArray(mapping.user) ? mapping.user[0] : mapping.user
+              user: profiles.get(mapping.user_id) || null
             }))
           })),
           members: (data.members || []).map((member: any) => ({
             ...member,
-            user: Array.isArray(member.user) ? member.user[0] : member.user
+            user: profiles.get(member.user_id) || null
           }))
         }
         setProject(transformedData)

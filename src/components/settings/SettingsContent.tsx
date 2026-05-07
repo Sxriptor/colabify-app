@@ -42,16 +42,16 @@ export function SettingsContent() {
       if (!authUser) throw new Error('Not authenticated')
 
       const { data, error } = await supabase
-        .from('users')
-        .select('*')
+        .from('profiles')
+        .select('id, email, full_name, notification_preference, avatar_url, github_username')
         .eq('id', authUser.id)
         .single()
 
       if (error) throw error
 
-      setSettings(data)
+      setSettings({ ...data, name: data.full_name })
       setFormData({
-        name: data.name || '',
+        name: data.full_name || '',
         notification_preference: data.notification_preference || 'instant'
       })
     } catch (err) {
@@ -75,19 +75,18 @@ export function SettingsContent() {
       if (!authUser) throw new Error('Not authenticated')
 
       const { data, error } = await supabase
-        .from('users')
+        .from('profiles')
         .update({
-          name: formData.name,
+          full_name: formData.name,
           notification_preference: formData.notification_preference,
-          updated_at: new Date().toISOString(),
         })
         .eq('id', authUser.id)
-        .select()
+        .select('id, email, full_name, notification_preference, avatar_url, github_username')
         .single()
 
       if (error) throw error
 
-      setSettings(data)
+      setSettings({ ...data, name: data.full_name })
       setSuccessMessage('Settings updated successfully!')
 
       // Clear success message after 3 seconds

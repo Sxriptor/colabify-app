@@ -13,23 +13,24 @@ export interface CreateUserData {
 }
 
 /**
- * Create a user record in our custom users table
+ * Create or update a profile record in public.profiles
  */
 export async function createUserRecord(userData: CreateUserData) {
   const supabase = await createClient()
   
   const { data, error } = await supabase
-    .from('users')
-    .insert({
+    .from('profiles')
+    .upsert({
       id: userData.id,
       email: userData.email,
-      name: userData.name,
+      full_name: userData.name,
       github_id: userData.github_id,
       github_username: userData.github_username,
       avatar_url: userData.avatar_url,
-      notification_preference: userData.notification_preference || 'instant'
+      notification_preference: userData.notification_preference || 'instant',
+      role: 'client',
     })
-    .select()
+    .select('id, email, full_name, role, avatar_url, github_id, github_username, notification_preference, notification_preferences')
     .single()
 
   if (error) {
@@ -48,11 +49,11 @@ export async function createUserRecord(userData: CreateUserData) {
     // Don't fail user creation if invitation handling fails
   }
 
-  return data
+  return data ? { ...data, name: data.full_name } : data
 }
 
 /**
- * Get or create a user record from Supabase auth user
+ * Get or create a profile record from Supabase auth user
  */
 export async function getOrCreateUser(authUser: User) {
   console.log('getOrCreateUser called for:', authUser.email)
@@ -60,10 +61,10 @@ export async function getOrCreateUser(authUser: User) {
   
   const supabase = await createClient()
   
-  // First, try to get existing user
+  // First, try to get existing profile
   const { data: existingUser, error: selectError } = await supabase
-    .from('users')
-    .select('*')
+    .from('profiles')
+    .select('id, email, full_name, role, avatar_url, github_id, github_username, notification_preference, notification_preferences')
     .eq('id', authUser.id)
     .single()
 
@@ -73,10 +74,10 @@ export async function getOrCreateUser(authUser: User) {
 
   if (existingUser) {
     console.log('Found existing user:', existingUser.email)
-    return existingUser
+    return { ...existingUser, name: existingUser.full_name }
   }
 
-  console.log('User not found, creating new user record...')
+  console.log('Profile not found, creating new profile record...')
 
   // If user doesn't exist, create them
   const userData: CreateUserData = {
@@ -95,7 +96,7 @@ export async function getOrCreateUser(authUser: User) {
 }
 
 /**
- * Ensure current user exists in our users table
+ * Ensure current user exists in public.profiles
  */
 export async function ensureUserExists() {
   const supabase = await createClient()

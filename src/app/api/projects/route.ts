@@ -1,4 +1,5 @@
 import { getAuthenticatedClient } from '@/lib/supabase/api-auth'
+import { fetchProfilesMap } from '@/lib/profiles'
 import { NextResponse } from 'next/server'
 
 export async function GET(request: Request) {
@@ -22,13 +23,12 @@ export async function GET(request: Request) {
       .from('projects')
       .select(`
         *,
-        owner:users!projects_owner_id_fkey(id, name, email, avatar_url),
         repositories(id, name, full_name, url),
         members:project_members(
           id,
+          user_id,
           role,
-          status,
-          user:users(id, name, email, avatar_url)
+          status
         )
       `)
       .eq('owner_id', user.id)
@@ -39,7 +39,24 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Failed to fetch projects' }, { status: 500 })
     }
 
-    return NextResponse.json({ projects })
+    const profiles = await fetchProfilesMap(
+      supabase,
+      (projects || []).flatMap((project: any) => [
+        project.owner_id,
+        ...(project.members || []).map((member: any) => member.user_id),
+      ])
+    )
+
+    const normalizedProjects = (projects || []).map((project: any) => ({
+      ...project,
+      owner: profiles.get(project.owner_id) || null,
+      members: (project.members || []).map((member: any) => ({
+        ...member,
+        user: profiles.get(member.user_id) || null,
+      }))
+    }))
+
+    return NextResponse.json({ projects: normalizedProjects })
   } catch (error) {
     console.error('Projects API error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
@@ -67,6 +84,24 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Invalid visibility value' }, { status: 400 })
     }
 
+    const { error: profileError } = await supabase
+      .from('profiles')
+      .upsert({
+        id: user.id,
+        email: user.email!,
+        full_name: user.user_metadata?.full_name || user.user_metadata?.name || null,
+        avatar_url: user.user_metadata?.avatar_url || null,
+        github_id: user.user_metadata?.provider_id ? parseInt(user.user_metadata.provider_id) : null,
+        github_username: user.user_metadata?.user_name || user.user_metadata?.preferred_username || null,
+        notification_preference: 'instant',
+        role: user.user_metadata?.role || 'client',
+      })
+
+    if (profileError) {
+      console.error('Profile ensure error:', profileError)
+      return NextResponse.json({ error: 'Failed to prepare user profile' }, { status: 500 })
+    }
+
     // Create project
     const { data: project, error } = await supabase
       .from('projects')
@@ -76,10 +111,7 @@ export async function POST(request: Request) {
         visibility: visibility || 'private',
         owner_id: user.id,
       })
-      .select(`
-        *,
-        owner:users!projects_owner_id_fkey(id, name, email, avatar_url)
-      `)
+      .select(`*`)
       .single()
 
     if (error) {
@@ -104,7 +136,13 @@ export async function POST(request: Request) {
       // This is likely an RLS issue - see FIX_PROJECT_MEMBERS_ISSUE.md
     }
 
-    return NextResponse.json({ project }, { status: 201 })
+    const profiles = await fetchProfilesMap(supabase, [project.owner_id])
+    const normalizedProject = {
+      ...project,
+      owner: profiles.get(project.owner_id) || null,
+    }
+
+    return NextResponse.json({ project: normalizedProject }, { status: 201 })
   } catch (error) {
     console.error('Project creation API error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

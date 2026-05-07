@@ -31,10 +31,10 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Unauthorized - Invalid token' }, { status: 401 })
     }
 
-    // Get user profile from our users table
+    // Get user profile from profiles
     const { data: profile, error: profileError } = await supabase
-      .from('users')
-      .select('*')
+      .from('profiles')
+      .select('id, email, full_name, role, avatar_url, github_id, github_username, notification_preference, notification_preferences')
       .eq('id', user.id)
       .single()
 
@@ -46,16 +46,18 @@ export async function GET(request: Request) {
     // If no profile exists, create one
     if (!profile) {
       const { data: newProfile, error: createError } = await supabase
-        .from('users')
+        .from('profiles')
         .insert({
           id: user.id,
           email: user.email!,
-          name: user.user_metadata?.name || user.user_metadata?.full_name,
+          full_name: user.user_metadata?.full_name || user.user_metadata?.name,
+          role: user.user_metadata?.role || 'client',
           github_id: user.user_metadata?.provider_id ? parseInt(user.user_metadata.provider_id) : null,
           github_username: user.user_metadata?.user_name,
           avatar_url: user.user_metadata?.avatar_url,
+          notification_preference: 'instant',
         })
-        .select()
+        .select('id, email, full_name, role, avatar_url, github_id, github_username, notification_preference, notification_preferences')
         .single()
 
       if (createError) {
@@ -63,10 +65,10 @@ export async function GET(request: Request) {
         return NextResponse.json({ error: 'Failed to create profile' }, { status: 500 })
       }
 
-      return NextResponse.json({ user: newProfile })
+      return NextResponse.json({ user: { ...newProfile, name: newProfile.full_name } })
     }
 
-    return NextResponse.json({ user: profile })
+    return NextResponse.json({ user: { ...profile, name: profile.full_name } })
   } catch (error) {
     console.error('IDE User API error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

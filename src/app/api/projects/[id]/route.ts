@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { fetchProfilesMap } from '@/lib/profiles'
 import { NextResponse } from 'next/server'
 
 export async function GET(
@@ -21,15 +22,14 @@ export async function GET(
       .from('projects')
       .select(`
         *,
-        owner:users!projects_owner_id_fkey(id, name, email, avatar_url),
         members:project_members(
           id,
+          user_id,
           role,
           status,
           invited_email,
           invited_at,
-          joined_at,
-          user:users(id, name, email, avatar_url)
+          joined_at
         ),
         repositories(id, name, full_name, url, connected_at)
       `)
@@ -46,14 +46,28 @@ export async function GET(
 
     // Check if user has access to this project
     const hasAccess = project.owner_id === user.id || 
-      project.members.some((m: any) => m.user?.id === user.id && m.status === 'active') ||
+      project.members.some((m: any) => m.user_id === user.id && m.status === 'active') ||
       project.visibility === 'public'
 
     if (!hasAccess) {
       return NextResponse.json({ error: 'Access denied' }, { status: 403 })
     }
 
-    return NextResponse.json({ project })
+    const profiles = await fetchProfilesMap(
+      supabase,
+      [project.owner_id, ...(project.members || []).map((member: any) => member.user_id)]
+    )
+
+    const normalizedProject = {
+      ...project,
+      owner: profiles.get(project.owner_id) || null,
+      members: (project.members || []).map((member: any) => ({
+        ...member,
+        user: profiles.get(member.user_id) || null,
+      }))
+    }
+
+    return NextResponse.json({ project: normalizedProject })
   } catch (error) {
     console.error('Project API error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
@@ -114,10 +128,7 @@ export async function PUT(
       .from('projects')
       .update(updateData)
       .eq('id', id)
-      .select(`
-        *,
-        owner:users!projects_owner_id_fkey(id, name, email, avatar_url)
-      `)
+      .select(`*`)
       .single()
 
     if (updateError) {
@@ -125,7 +136,13 @@ export async function PUT(
       return NextResponse.json({ error: 'Failed to update project' }, { status: 500 })
     }
 
-    return NextResponse.json({ project: updatedProject })
+    const profiles = await fetchProfilesMap(supabase, [updatedProject.owner_id])
+    const normalizedProject = {
+      ...updatedProject,
+      owner: profiles.get(updatedProject.owner_id) || null,
+    }
+
+    return NextResponse.json({ project: normalizedProject })
   } catch (error) {
     console.error('Project update API error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

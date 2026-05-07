@@ -6,6 +6,7 @@ import { ProjectCard } from '@/components/projects/ProjectCard'
 import { CreateProjectForm } from '@/components/projects/CreateProjectForm'
 import { NotificationSettings } from '@/components/notifications/NotificationSettings'
 import { useElectronNotifications } from '@/hooks/useElectronNotifications'
+import { fetchProfilesMap } from '@/lib/profiles'
 
 
 export function DashboardContent() {
@@ -32,13 +33,12 @@ export function DashboardContent() {
         .from('projects')
         .select(`
           *,
-          owner:users!projects_owner_id_fkey(id, name, email, avatar_url),
           repositories(id, name, full_name, url),
           members:project_members(
             id,
+            user_id,
             role,
-            status,
-            user:users(id, name, email, avatar_url)
+            status
           ),
           watches:project_watches!project_watches_project_id_fkey(
             id,
@@ -49,13 +49,21 @@ export function DashboardContent() {
 
       if (error) throw error
 
+      const profiles = await fetchProfilesMap(
+        supabase,
+        (data || []).flatMap((project: any) => [
+          project.owner_id,
+          ...(project.members || []).map((member: any) => member.user_id),
+        ])
+      )
+
       // Transform data to handle Supabase array responses for relations
       const transformedData = (data || []).map(project => ({
         ...project,
-        owner: Array.isArray(project.owner) ? project.owner[0] : project.owner,
+        owner: profiles.get(project.owner_id) || null,
         members: (project.members || []).map((member: any) => ({
           ...member,
-          user: Array.isArray(member.user) ? member.user[0] : member.user
+          user: profiles.get(member.user_id) || null
         }))
       }))
 

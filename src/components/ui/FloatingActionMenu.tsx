@@ -4,6 +4,7 @@ import { useAuth } from '@/lib/auth/context'
 import { useRouter, usePathname } from 'next/navigation'
 import { useState, useEffect } from 'react'
 import { RepoVisualizationModal } from '../projects/RepoVisualizationModal'
+import { fetchProfilesMap } from '@/lib/profiles'
 
 export function FloatingActionMenu() {
   const { signOut, user } = useAuth()
@@ -66,7 +67,7 @@ export function FloatingActionMenu() {
             local_mappings:repository_local_mappings(
               id,
               local_path,
-              user:users(id, name, email)
+              user_id
             )
           )
         `)
@@ -74,6 +75,13 @@ export function FloatingActionMenu() {
         .single()
 
       if (error) throw error
+
+      const profiles = await fetchProfilesMap(
+        supabase,
+        (data?.repositories || []).flatMap((repo: any) =>
+          (repo.local_mappings || []).map((mapping: any) => mapping.user_id)
+        )
+      )
 
       // Transform data to handle Supabase array responses for relations
       if (data) {
@@ -83,7 +91,7 @@ export function FloatingActionMenu() {
             ...repo,
             local_mappings: (repo.local_mappings || []).map((mapping: any) => ({
               ...mapping,
-              user: Array.isArray(mapping.user) ? mapping.user[0] : mapping.user
+              user: profiles.get(mapping.user_id) || null
             }))
           }))
         }
@@ -114,30 +122,17 @@ export function FloatingActionMenu() {
         console.error('Error fetching pending invitations count:', inviteError)
       }
 
-      // Get project IDs the user can access (owned + member of)
-      const { data: userProjects, error: projectsError } = await supabase
-        .from('projects')
-        .select('id')
-        .or(`owner_id.eq.${user!.id},id.in.(${supabase
-          .from('project_members')
-          .select('project_id')
-          .eq('user_id', user!.id)
-          .eq('status', 'active')
-          })`)
-
       let notificationCount = 0
-      if (!projectsError && userProjects && userProjects.length > 0) {
-        const projectIds = userProjects.map(p => p.id)
-        const { count, error: notifError } = await supabase
-          .from('notifications')
-          .select('*', { count: 'exact', head: true })
-          .in('project_id', projectIds)
+      const { count, error: notifError } = await supabase
+        .from('notifications')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', user!.id)
+        .eq('read', false)
 
-        if (notifError) {
-          console.error('Error fetching notifications count:', notifError)
-        } else {
-          notificationCount = count || 0
-        }
+      if (notifError) {
+        console.error('Error fetching notifications count:', notifError)
+      } else {
+        notificationCount = count || 0
       }
 
       const totalUnread = (invitationCount || 0) + (notificationCount || 0)

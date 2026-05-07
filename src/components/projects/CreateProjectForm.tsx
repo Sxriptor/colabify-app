@@ -1,5 +1,8 @@
 'use client'
 
+'use client'
+
+import { normalizeProfile } from '@/lib/profiles'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 
@@ -30,6 +33,23 @@ export function CreateProjectForm({ onSuccess, onCancel }: CreateProjectFormProp
       const { data: { user: authUser } } = await supabase.auth.getUser()
       if (!authUser) throw new Error('Not authenticated')
 
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .upsert({
+          id: authUser.id,
+          email: authUser.email!,
+          full_name: authUser.user_metadata?.full_name || authUser.user_metadata?.name || null,
+          avatar_url: authUser.user_metadata?.avatar_url || null,
+          github_id: authUser.user_metadata?.provider_id ? parseInt(authUser.user_metadata.provider_id) : null,
+          github_username: authUser.user_metadata?.user_name || authUser.user_metadata?.preferred_username || null,
+          notification_preference: 'instant',
+          role: authUser.user_metadata?.role || 'client',
+        })
+
+      if (profileError) {
+        throw profileError
+      }
+
       // Create project
       const { data: project, error: projectError } = await supabase
         .from('projects')
@@ -39,13 +59,21 @@ export function CreateProjectForm({ onSuccess, onCancel }: CreateProjectFormProp
           visibility: visibility || 'private',
           owner_id: authUser.id,
         })
-        .select(`
-          *,
-          owner:users!projects_owner_id_fkey(id, name, email, avatar_url)
-        `)
+        .select(`*`)
         .single()
 
       if (projectError) throw projectError
+
+      const { data: ownerProfile } = await supabase
+        .from('profiles')
+        .select('id, email, full_name, avatar_url')
+        .eq('id', authUser.id)
+        .single()
+
+      const normalizedProject = {
+        ...project,
+        owner: normalizeProfile(ownerProfile),
+      }
 
       // Add owner as project member
       const { error: memberError } = await supabase
@@ -65,9 +93,9 @@ export function CreateProjectForm({ onSuccess, onCancel }: CreateProjectFormProp
       }
 
       if (onSuccess) {
-        onSuccess(project)
+        onSuccess(normalizedProject)
       } else {
-        router.push(`/projects/${project.id}`)
+        router.push(`/projects/${normalizedProject.id}`)
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred')
