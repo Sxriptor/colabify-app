@@ -228,9 +228,9 @@ export function LiveActivityPanel({ project }: LiveActivityPanelProps) {
 
                   {/* User's Recent Activities */}
                   <div className="divide-y divide-gray-100">
-                    {userActivity.activities.map((activity) => (
+                    {userActivity.activities.map((activity, activityIndex) => (
                       <div
-                        key={activity.id}
+                        key={`${activity.id}-${activityIndex}`}
                         className="flex items-start space-x-3 px-4 py-3 hover:bg-gray-50 transition-colors"
                       >
                         <div className="text-lg flex-shrink-0 mt-0.5">{getActivityIcon(activity.activityType)}</div>
